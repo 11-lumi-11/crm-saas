@@ -1,23 +1,37 @@
-service: api-usuarios-tenants
+frameworkVersion: '4'
+service: crm-usuarios
 
 provider:
   name: aws
-  runtime: python3.13
+  runtime: python3.14
+  region: us-east-1
   memorySize: 1024
   timeout: 20
   iam:
-    role: arn:aws:iam::246946388956:role/LabRole
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  layers: 
+    - ${cf:crm-compartido-${sls:stage}.CapaJwtArn}
+  httpApi:
+    cors: true
+    authorizers:
+      authorizerJwt:
+        type: request
+        functionArn: ${cf:crm-compartido-${sls:stage}.AuthorizerArn}
+        identitySource:
+          - $request.header.Authorization
+        resultTtlInSeconds: 0
+        enableSimpleResponses: true
+        payloadVersion: '2.0'
   environment:
-    TABLE_TENANTS: ${sls:stage}-t_tenants-proy
-    TABLE_USUARIOS: ${sls:stage}-t_usuarios-proy
-    TABLE_TENANTS_LOCKS: ${sls:stage}-t_tenants_locks-proy
+    JWT_SECRET: ${env:JWT_SECRET}
+    JWT_EXPIRACION_HORAS: '8'
+    TABLE_TENANTS: ${sls:stage}-t_tenants
+    TABLE_USUARIOS: ${sls:stage}-t_usuarios
+    TABLE_TENANTS_LOCKS: ${sls:stage}-t_tenants_locks
     INDEX_NOMBRE: nombre_normalizado-index
-    SNS_TOPIC_ARN: !Ref EventosCrmTopic
+    SNS_TOPIC_ARN: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
 
 functions:
-  # Lambda Authorizer para validar tokens
-  authorizerFunc:
-    handler: Authorizer.lambda_handler
 
   # 1. POST /tenants (Público)
   crearTenant:
@@ -26,7 +40,6 @@ functions:
       - http:
           path: /tenants
           method: post
-          cors: true
 
   # 2. POST /usuarios/login (Público)
   loginUsuario:
@@ -35,7 +48,6 @@ functions:
       - http:
           path: /usuarios/login
           method: post
-          cors: true
 
   # 3. POST /usuarios (Protegido - solo admin)
   crearUsuario:
@@ -44,10 +56,8 @@ functions:
       - http:
           path: /usuarios
           method: post
-          cors: true
           authorizer:
-            name: authorizerFunc
-            resultTtlInSeconds: 0
+            name: authorizerJwt
 
   # 4. GET /usuarios (Protegido)
   listarUsuarios:
@@ -56,10 +66,8 @@ functions:
       - http:
           path: /usuarios
           method: get
-          cors: true
           authorizer:
-            name: authorizerFunc
-            resultTtlInSeconds: 0
+            name: authorizerJwt
 
   # 5. PUT /usuarios/{usuario_id} (Protegido - solo admin)
   actualizarUsuario:
@@ -68,10 +76,8 @@ functions:
       - http:
           path: /usuarios/{usuario_id}
           method: put
-          cors: true
           authorizer:
-            name: authorizerFunc
-            resultTtlInSeconds: 0
+            name: authorizerJwt
 
 resources:
   Resources:
@@ -136,7 +142,3 @@ resources:
               ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
     
-    EventosCrmTopic:
-      Type: AWS::SNS::Topic
-      Properties:
-        TopicName: ${sls:stage}-eventos-crm-topic

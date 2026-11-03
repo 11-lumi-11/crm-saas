@@ -1,0 +1,55 @@
+frameworkVersion: '4'
+service: crm-compartido
+
+provider:
+  name: aws
+  runtime: python3.14
+  region: us-east-1
+  memorySize: 256
+  timeout: 10
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  environment:
+    JWT_SECRET: ${env:JWT_SECRET}
+
+package:
+  patterns:
+    - '!capa_jwt/**'
+
+layers:
+  pyjwt:
+    path: capa_jwt
+    name: ${sls:stage}-crm-pyjwt
+    description: Libreria PyJWT compartida por los servicios
+    compatibleRuntimes:
+      - python3.14
+
+functions:
+  authorizer:
+    handler: authorizer/Authorizer.lambda_handler
+    layers:
+      - { Ref: PyjwtLambdaLayer }
+
+resources:
+  Resources:
+    EventosCrmTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ${sls:stage}-eventos-crm-topic
+
+    # Permite que los API Gateway de los otros servicios invoquen al authorizer
+    PermisoInvocarAuthorizer:
+      Type: AWS::Lambda::Permission
+      Properties:
+        Action: lambda:InvokeFunction
+        FunctionName: !GetAtt AuthorizerLambdaFunction.Arn
+        Principal: apigateway.amazonaws.com
+        SourceArn: arn:aws:execute-api:${aws:region}:${aws:accountId}:*/authorizers/*
+
+  Outputs:
+    CapaJwtArn:
+      Value: !Ref PyjwtLambdaLayer
+    AuthorizerArn:
+      Value: !GetAtt AuthorizerLambdaFunction.Arn
+    EventosTopicArn:
+      Value: !Ref EventosCrmTopic
