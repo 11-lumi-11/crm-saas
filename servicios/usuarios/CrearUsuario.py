@@ -3,11 +3,10 @@ import uuid
 import os
 import json
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from boto3.dynamodb.conditions import Key
 
 def lambda_handler(event, context):
-    print(event)
     
     # Extraer tenant_id y rol del contexto del Authorizer de API Gateway
     claims = event.get('requestContext', {}).get('authorizer', {}).get('lambda', {})
@@ -31,6 +30,12 @@ def lambda_handler(event, context):
             'statusCode': 400,
             'body': json.dumps({'codigo': 'datos_incompletos', 'mensaje': 'Faltan campos obligatorios'})
         }
+
+    if rol not in ('admin', 'gerente', 'vendedor'):
+        return {
+           'statusCode': 400,
+           'body': json.dumps({'codigo': 'rol_invalido', 'mensaje': 'Rol no permitido'})
+    }
     
     # Normalizar correo (ignora mayúsculas y espacios extra)
     correo = correo.strip().lower()
@@ -40,7 +45,7 @@ def lambda_handler(event, context):
     
     uuid_raw = str(uuid.uuid4()).replace('-', '')[:8]
     usuario_id = f"usr_{uuid_raw}"
-    fecha_creacion = datetime.utcnow().isoformat() + "Z"
+    fecha_creacion = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     contrasena_hash = hashlib.sha256(contrasena.encode('utf-8')).hexdigest()
     
     usuario = {
@@ -89,7 +94,8 @@ def lambda_handler(event, context):
             }
             sns.publish(
                 TopicArn=sns_topic_arn,
-                Message=json.dumps(evento)
+                Message=json.dumps(evento),
+                MessageAttributes={'tipo': {'DataType': 'String', 'StringValue': 'usuario.creado'}}
             )
         except Exception as e_sns:
             print(f"Advertencia: No se pudo publicar en SNS: {e_sns}")

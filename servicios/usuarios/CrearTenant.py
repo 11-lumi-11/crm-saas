@@ -3,11 +3,10 @@ import uuid
 import os
 import json
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from boto3.dynamodb.conditions import Key
 
 def lambda_handler(event, context):
-    print(event)
     
     # Manejar body como string o dict
     body = json.loads(event['body']) if isinstance(event.get('body'), str) else event.get('body', {})
@@ -37,7 +36,7 @@ def lambda_handler(event, context):
     uuid_raw = str(uuid.uuid4()).replace('-', '')[:8]
     tenant_id = f"ten_{uuid_raw}"
     usuario_id = f"usr_{uuid_raw}"
-    fecha_creacion = datetime.utcnow().isoformat() + "Z"
+    fecha_creacion = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     
     contrasena_hash = hashlib.sha256(contrasena.encode('utf-8')).hexdigest()
     
@@ -131,7 +130,8 @@ def lambda_handler(event, context):
             }
             sns.publish(
                 TopicArn=sns_topic_arn,
-                Message=json.dumps(evento)
+                Message=json.dumps(evento), 
+                MessageAttributes={'tipo': {'DataType': 'String', 'StringValue': 'usuario.creado'}}
             )
         except Exception as e_sns:
             print(f"Advertencia: No se pudo publicar en SNS: {e_sns}")

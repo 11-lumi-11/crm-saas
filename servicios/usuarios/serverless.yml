@@ -33,52 +33,52 @@ provider:
 
 functions:
 
-  # 1. POST /tenants (Público)
+  # POST /tenants (público)
   crearTenant:
-    handler: CrearTenant.lambda_handler
+    handler: src/CrearTenant.lambda_handler
     events:
-      - http:
+      - httpApi:
           path: /tenants
           method: post
 
-  # 2. POST /usuarios/login (Público)
+  # POST /usuarios/login (público)
   loginUsuario:
-    handler: LoginUsuario.lambda_handler
+    handler: src/LoginUsuario.lambda_handler
     events:
-      - http:
+      - httpApi:
           path: /usuarios/login
           method: post
 
-  # 3. POST /usuarios (Protegido - solo admin)
+  # POST /usuarios (protegido, solo admin)
   crearUsuario:
-    handler: CrearUsuario.lambda_handler
+    handler: src/CrearUsuario.lambda_handler
     events:
-      - http:
+      - httpApi:
           path: /usuarios
           method: post
           authorizer:
             name: authorizerJwt
 
-  # 4. GET /usuarios (Protegido)
+  # GET /usuarios (protegido)
   listarUsuarios:
-    handler: ListarUsuarios.lambda_handler
+    handler: src/ListarUsuarios.lambda_handler
     events:
-      - http:
+      - httpApi:
           path: /usuarios
           method: get
           authorizer:
             name: authorizerJwt
 
-  # 5. PUT /usuarios/{usuario_id} (Protegido - solo admin)
+  # PUT /usuarios/{usuario_id} (protegido, solo admin)
   actualizarUsuario:
-    handler: ActualizarUsuario.lambda_handler
+    handler: src/ActualizarUsuario.lambda_handler
     events:
-      - http:
+      - httpApi:
           path: /usuarios/{usuario_id}
           method: put
           authorizer:
             name: authorizerJwt
-
+            
 resources:
   Resources:
     # Tabla 1: Tenants (con GSI para verificar nombre de empresa duplicado)
@@ -141,4 +141,8 @@ resources:
             Projection:
               ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
-    
+
+package:
+  patterns:
+    - '!.env'
+    - '!README.md'
