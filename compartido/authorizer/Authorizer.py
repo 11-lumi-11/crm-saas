@@ -7,7 +7,8 @@ def lambda_handler(event, context):
         token = token[7:]
 
     try:
-        datos = jwt.decode(token, os.environ['JWT_SECRET'], algorithms=['HS256'])
+        datos = jwt.decode(token, os.environ['JWT_SECRET'], algorithms=['HS256'],
+                     options={'require': ['exp', 'tenant_id', 'usuario_id', 'rol']})
         return {
             'isAuthorized': True,
             'context': {

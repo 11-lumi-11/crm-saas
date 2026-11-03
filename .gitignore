@@ -1,3 +1,4 @@
 compartido/capa_jwt/python/
 .serverless/
 .env
+.venv/
