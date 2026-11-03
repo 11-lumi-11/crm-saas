@@ -1,4 +1,6 @@
-frameworkVersion: '4'
+#modificar el nombre de la org 
+org: percycastro 
+app: crm-saas
 service: crm-compartido
 
 provider:
