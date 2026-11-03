@@ -10,7 +10,7 @@ def lambda_handler(event, context):
     print(event)
     
     # Extraer tenant_id y rol del contexto del Authorizer de API Gateway
-    claims = event.get('requestContext', {}).get('authorizer', {})
+    claims = event.get('requestContext', {}).get('authorizer', {}).get('lambda', {})
     tenant_id = claims.get('tenant_id')
     rol_solicitante = claims.get('rol')
     

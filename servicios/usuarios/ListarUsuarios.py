@@ -4,8 +4,8 @@ import json
 
 def lambda_handler(event, context):
     print(event)
-    
-    claims = event.get('requestContext', {}).get('authorizer', {})
+   
+    claims = event.get('requestContext', {}).get('authorizer', {}).get('lambda', {})    
     tenant_id = claims.get('tenant_id')
     
     tabla_usuarios = os.environ.get("TABLE_USUARIOS", "t_usuarios")
