@@ -73,10 +73,12 @@ Otras piezas del grupo: **FrontEnd (Amplify)**, **Diagrama de arquitectura**, **
 ## 5. Seguridad: autenticación y autorización
 
 - **Autenticación (quién eres):** el usuario envía correo y contraseña al servicio 1. Si son correctos, recibe un **token JWT** que contiene `usuario_id`, `tenant_id` y `rol`, con tiempo de expiración.
-- **Validación:** API Gateway detiene cada petición protegida y ejecuta el **Lambda Authorizer**, que revisa que el token sea auténtico y no esté vencido. Si no lo es, la petición se rechaza y el servicio **nunca se ejecuta**. Si lo es, el servicio recibe la petición con `tenant_id`, `usuario_id` y `rol`.
+- **Validación:** API Gateway (HTTP API) detiene cada petición protegida y ejecuta el **Lambda Authorizer**, que revisa que el token sea auténtico y no esté vencido. Si no lo es, la petición se rechaza y el servicio **nunca se ejecuta**. Si lo es, el servicio recibe la petición con `tenant_id`, `usuario_id` y `rol`.
 - **Autorización (qué puedes hacer):** cada servicio revisa el `rol` según la tabla de permisos.
 - **Rutas públicas** (sin token): solo `POST /usuarios/login` y el registro de una nueva empresa. **Todo lo demás es protegido.**
-- **Clave secreta del token:** nunca en el código ni en el repositorio público. Todos usan la misma. **\[CONFIRMAR\]** dónde se guarda (variable de entorno u otro mecanismo disponible en AWS Academy).
+- **Clave secreta del token:** variable de entorno `JWT_SECRET` (nunca en el código ni en el repositorio). Todos los servicios y el authorizer usan la misma.
+- **Hash de contraseña:** por ahora SHA-256. **\[VERIFICAR\]** si el curso exige un algoritmo más fuerte (bcrypt o similar).
+- **Códigos 401 vs 403 del token:** el Flujo 8 pide 401 si falta el token y 403 si está vencido o alterado. Con HTTP API y respuestas simples del authorizer, API Gateway puede devolver el mismo rechazo en ambos casos. **\[VERIFICAR\]** en una prueba real y ajustar si hace falta.
 
 ### Permisos por rol
 
@@ -146,9 +148,21 @@ Para cada servicio: qué hace, qué no hace, qué guarda, qué rutas ofrece y qu
 | --- | --- |
 | `tenant_id` | Identificador de la empresa |
 | `nombre` | Nombre comercial |
+| `nombre_normalizado` | Nombre en minúsculas y sin espacios de más. Sirve para detectar empresas duplicadas (GSI `nombre_normalizado-index`) |
 | `rubro` | Sector de la empresa |
 | `estado` | `activo`, `suspendido` |
 | `fecha_creacion` | Fecha de alta |
+
+**Tabla `t_tenants_locks`**
+
+Candado para que dos registros simultáneos no creen la misma empresa. No es una tabla de negocio; solo guarda el nombre ya tomado.
+
+| Campo | Descripción |
+| --- | --- |
+| `nombre_normalizado` | Clave única. Si ya existe, el registro se rechaza |
+| `fecha_creacion` | Cuándo se tomó el candado |
+
+Al registrar un tenant se escribe primero el candado (con condición de que no exista). Si después falla el alta del tenant, se borra el candado.
 
 **Tabla `t_usuarios`**
 
@@ -174,6 +188,8 @@ Para cada servicio: qué hace, qué no hace, qué guarda, qué rutas ofrece y qu
 | `PUT /usuarios/{usuario_id}` | Editar rol o estado | Sí (admin) |
 
 **Eventos:** publica `usuario.creado`. No escucha ninguno.
+
+**\[VERIFICAR\]** Usuarios ya publica en el topic SNS compartido, pero todavía no hay colas SQS ni servicio de Notificaciones que consuma. Cuando exista el consumidor, confirmar que el mensaje llega y que el atributo `tipo` permite filtrar.
 
 ### 7.2 Clientes
 
@@ -206,9 +222,9 @@ Para cada servicio: qué hace, qué no hace, qué guarda, qué rutas ofrece y qu
 | `es_principal` | Si es el contacto principal del cliente (verdadero/falso) |
 | `fecha_creacion` | Fecha de alta |
 
-**Rutas principales:** `POST /clientes`, `GET /clientes`, `GET /clientes/{cliente_id}`, `PUT /clientes/{cliente_id}`, `DELETE /clientes/{cliente_id}`, `POST /clientes/{cliente_id}/contactos`, `GET /clientes/{cliente_id}/contactos`.
+**Rutas principales:** `POST /clientes`, `GET /clientes`, `GET /clientes/{cliente_id}`, `PUT /clientes/{cliente_id}`, `DELETE /clientes/{cliente_id}`, `POST /clientes/{cliente_id}/contactos`, `GET /clientes/{cliente_id}/contactos`. Todas protegidas (HTTP API + Lambda Authorizer). Un vendedor no puede eliminar ni reasignar `responsable_id`. Si el `responsable_id` no se envía al crear, se usa el `usuario_id` del token.
 
-**Eventos:** publica `cliente.creado`. No escucha ninguno.
+**Eventos:** publica `cliente.creado`. No escucha ninguno. **\[VERIFICAR\]** igual que Usuarios: el evento se publica; el consumo queda para Notificaciones.
 
 ### 7.3 Oportunidades
 
@@ -456,7 +472,6 @@ Casos que deben comportarse así y que se prueban en la demo:
 
 - **Un solo repositorio público** de GitHub con una carpeta por servicio (`usuarios`, `clientes`, `oportunidades`, `actividades`, `productos_cotizaciones`, `notificaciones`), una carpeta para el authorizer y las piezas compartidas, y otra para el frontend.
 - Cada avance se sube con frecuencia, aunque esté a medias. **Si no está en el repositorio, para el grupo no existe.**
-- **\[CONFIRMAR\]** flujo de ramas: una rama por persona o por servicio y unión a la rama principal al terminar cada pieza.
 - Nada de claves ni credenciales en el repositorio.
 
 ### Despliegue
@@ -493,7 +508,7 @@ Cualquier cambio de nombres, campos, rutas o eventos se hace **primero aquí** y
 
 | Fecha | Qué cambió | Quién |
 | --- | --- | --- |
-|  |  |  |
+| 2026-11-04 | Candado `t_tenants_locks` y campo `nombre_normalizado` para no duplicar empresas. Advertencias a verificar: 401 vs 403 del authorizer, hash SHA-256, eventos SNS sin consumidores todavía. | Castro |
 
 ## 13. Decisiones pendientes
 
@@ -502,8 +517,10 @@ Cualquier cambio de nombres, campos, rutas o eventos se hace **primero aquí** y
 - [x] Confirmar dónde se guarda la clave secreta del token en AWS Academy.
 - [x] Confirmar qué 2 tenants se usan en la demo (sección 3).
 - [x] Confirmar la distribución de los 30,000 registros por servicio (sección 10).
-- [ ] Asignar responsables por microservicio y por las demás piezas.
-- [ ] Definir flujo de ramas del repositorio.
-- [ ] Definir fechas de los hitos internos.
+- [x] Confirmar que todos los servicios usan DynamoDB (el enunciado permite SQL o NoSQL por servicio).
 
-* [x] Confirmar que todos los servicios usan DynamoDB (el enunciado permite SQL o NoSQL por servicio).
+## 14. Para verificar más adelante
+
+- [ ] **401 vs 403:** petición sin cabecera `Authorization` → 401; token vencido o alterado → 403. Probar contra HTTP API + authorizer de respuestas simples y ajustar si API Gateway unifica ambos rechazos.
+- [ ] **Hash de contraseña:** SHA-256 es lo que usa Usuarios hoy. Cambiar a bcrypt (u otro) si el enunciado o el profesor lo piden.
+- [ ] **Consumo de eventos:** Usuarios y Clientes publican en el topic SNS compartido (`usuario.creado`, `cliente.creado`). Cuando existan las colas SQS de Notificaciones (y las demás), comprobar suscripción, filtro por atributo `tipo` y el formato del mensaje.
