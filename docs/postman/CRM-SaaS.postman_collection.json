@@ -1,0 +1,323 @@
+{
+  "info": {
+    "name": "CRM SaaS — Usuarios + Clientes",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "usuarios_url", "value": "https://6ge9waha1h.execute-api.us-east-1.amazonaws.com" },
+    { "key": "clientes_url", "value": "https://3l552xeuv9.execute-api.us-east-1.amazonaws.com" },
+    { "key": "correo_admin", "value": "admin.seguros.817370@demo.test" },
+    { "key": "correo_vendedor", "value": "marta.vend.817370@demo.test" },
+    { "key": "correo_gerente", "value": "luis.ger.817370@demo.test" },
+    { "key": "contrasena", "value": "ClaveSegura123" },
+    { "key": "token_admin", "value": "" },
+    { "key": "token_vendedor", "value": "" },
+    { "key": "token_gerente", "value": "" },
+    { "key": "usuario_vendedor_id", "value": "usr_90a65783" },
+    { "key": "usuario_gerente_id", "value": "usr_14e92a97" },
+    { "key": "cliente_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Usuarios",
+      "item": [
+        {
+          "name": "Registrar tenant (público)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre_empresa\": \"Seguros Andinos Demo\",\n  \"rubro\": \"seguros\",\n  \"nombre_admin\": \"Ana Admin\",\n  \"correo\": \"{{correo_admin}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}"
+            },
+            "url": "{{usuarios_url}}/tenants"
+          }
+        },
+        {
+          "name": "Login admin",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const d = pm.response.json();",
+                "pm.collectionVariables.set('token_admin', d.token);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo_admin}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}"
+            },
+            "url": "{{usuarios_url}}/usuarios/login"
+          }
+        },
+        {
+          "name": "Crear vendedor (admin)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const d = pm.response.json();",
+                "if (d.usuario_id) pm.collectionVariables.set('usuario_vendedor_id', d.usuario_id);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token_admin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Marta Vendedora\",\n  \"correo\": \"{{correo_vendedor}}\",\n  \"contrasena\": \"{{contrasena}}\",\n  \"rol\": \"vendedor\"\n}"
+            },
+            "url": "{{usuarios_url}}/usuarios"
+          }
+        },
+        {
+          "name": "Crear gerente (admin)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const d = pm.response.json();",
+                "if (d.usuario_id) pm.collectionVariables.set('usuario_gerente_id', d.usuario_id);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token_admin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Luis Gerente\",\n  \"correo\": \"{{correo_gerente}}\",\n  \"contrasena\": \"{{contrasena}}\",\n  \"rol\": \"gerente\"\n}"
+            },
+            "url": "{{usuarios_url}}/usuarios"
+          }
+        },
+        {
+          "name": "Listar usuarios (admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token_admin}}" }],
+            "url": "{{usuarios_url}}/usuarios"
+          }
+        },
+        {
+          "name": "Login vendedor",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const d = pm.response.json();",
+                "pm.collectionVariables.set('token_vendedor', d.token);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo_vendedor}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}"
+            },
+            "url": "{{usuarios_url}}/usuarios/login"
+          }
+        },
+        {
+          "name": "Login gerente",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const d = pm.response.json();",
+                "pm.collectionVariables.set('token_gerente', d.token);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo_gerente}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}"
+            },
+            "url": "{{usuarios_url}}/usuarios/login"
+          }
+        },
+        {
+          "name": "Vendedor crea usuario (debe 403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token_vendedor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Intruso\",\n  \"correo\": \"intruso@demo.test\",\n  \"contrasena\": \"{{contrasena}}\",\n  \"rol\": \"vendedor\"\n}"
+            },
+            "url": "{{usuarios_url}}/usuarios"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Clientes",
+      "item": [
+        {
+          "name": "Crear cliente (vendedor)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const d = pm.response.json();",
+                "if (d.cliente_id) pm.collectionVariables.set('cliente_id', d.cliente_id);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token_vendedor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Constructora Andes\",\n  \"tipo\": \"empresa\",\n  \"documento\": \"20123456789\",\n  \"correo\": \"compras@andes.test\",\n  \"telefono\": \"999111222\",\n  \"industria\": \"construccion\",\n  \"ciudad\": \"Lima\",\n  \"estado\": \"prospecto\"\n}"
+            },
+            "url": "{{clientes_url}}/clientes"
+          }
+        },
+        {
+          "name": "Listar clientes",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token_vendedor}}" }],
+            "url": "{{clientes_url}}/clientes"
+          }
+        },
+        {
+          "name": "Obtener cliente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token_vendedor}}" }],
+            "url": "{{clientes_url}}/clientes/{{cliente_id}}"
+          }
+        },
+        {
+          "name": "Editar cliente (vendedor)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token_vendedor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ciudad\": \"Arequipa\",\n  \"estado\": \"activo\"\n}"
+            },
+            "url": "{{clientes_url}}/clientes/{{cliente_id}}"
+          }
+        },
+        {
+          "name": "Reasignar responsable (vendedor, debe 403)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token_vendedor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"responsable_id\": \"{{usuario_gerente_id}}\"\n}"
+            },
+            "url": "{{clientes_url}}/clientes/{{cliente_id}}"
+          }
+        },
+        {
+          "name": "Crear contacto",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token_vendedor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Ana Compras\",\n  \"cargo\": \"gerente de compras\",\n  \"correo\": \"ana@andes.test\",\n  \"telefono\": \"988777666\",\n  \"es_principal\": true\n}"
+            },
+            "url": "{{clientes_url}}/clientes/{{cliente_id}}/contactos"
+          }
+        },
+        {
+          "name": "Listar contactos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token_vendedor}}" }],
+            "url": "{{clientes_url}}/clientes/{{cliente_id}}/contactos"
+          }
+        },
+        {
+          "name": "Eliminar cliente (vendedor, debe 403)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token_vendedor}}" }],
+            "url": "{{clientes_url}}/clientes/{{cliente_id}}"
+          }
+        },
+        {
+          "name": "Reasignar responsable (gerente, 200)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token_gerente}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"responsable_id\": \"{{usuario_gerente_id}}\"\n}"
+            },
+            "url": "{{clientes_url}}/clientes/{{cliente_id}}"
+          }
+        },
+        {
+          "name": "Sin token (debe 401)",
+          "request": {
+            "method": "GET",
+            "url": "{{clientes_url}}/clientes"
+          }
+        },
+        {
+          "name": "Token inválido (debe 403)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer token.falso.aqui" }],
+            "url": "{{clientes_url}}/clientes"
+          }
+        },
+        {
+          "name": "Eliminar cliente (gerente, 200)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token_gerente}}" }],
+            "url": "{{clientes_url}}/clientes/{{cliente_id}}"
+          }
+        }
+      ]
+    }
+  ]
+}
