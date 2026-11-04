@@ -17,7 +17,7 @@ def lambda_handler(event, context):
     correo = body.get('correo')
     contrasena = body.get('contrasena')
     
-    if not nombre_empresa or not correo or not contrasena:
+    if not nombre_empresa or not nombre_admin or not correo or not contrasena:
         return {
             'statusCode': 400,
             'body': json.dumps({'codigo': 'datos_incompletos', 'mensaje': 'Faltan campos obligatorios'})
