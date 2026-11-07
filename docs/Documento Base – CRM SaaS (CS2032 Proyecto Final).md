@@ -524,3 +524,24 @@ Cualquier cambio de nombres, campos, rutas o eventos se hace **primero aquí** y
 - [ ] **401 vs 403:** petición sin cabecera `Authorization` → 401; token vencido o alterado → 403. Probar contra HTTP API + authorizer de respuestas simples y ajustar si API Gateway unifica ambos rechazos.
 - [ ] **Hash de contraseña:** SHA-256 es lo que usa Usuarios hoy. Cambiar a bcrypt (u otro) si el enunciado o el profesor lo piden.
 - [ ] **Consumo de eventos:** Usuarios y Clientes publican en el topic SNS compartido (`usuario.creado`, `cliente.creado`). Cuando existan las colas SQS de Notificaciones (y las demás), comprobar suscripción, filtro por atributo `tipo` y el formato del mensaje.
+
+
+### Pendientes de corrección tras la revisión de Usuarios y Clientes
+
+Se corrigen antes de empezar el siguiente microservicio. Los marcados como **[DECIDIR]** requieren acuerdo del grupo y, una vez decididos, se registran en la sección 12.
+
+- [ ] **Token vigente tras desactivar a un usuario.** El Authorizer solo valida el JWT y no consulta la base, así que un usuario con `estado: inactivo` sigue entrando hasta que el token venza (8 horas). **[DECIDIR]** reducir `JWT_EXPIRACION_HORAS` a 1 o 2, o aceptarlo y documentarlo como limitación conocida en el informe.
+- [ ] **Hash de contraseña.** SHA-256 sin sal es débil. Reemplazar por `hashlib.scrypt` o `hashlib.pbkdf2_hmac` (librería estándar de Python, sin capa adicional), con sal aleatoria guardada junto al hash. Afecta a `CrearTenant`, `CrearUsuario`, `LoginUsuario` y al generador de datos (`datos/generar_datos.py`), que debe usar el mismo algoritmo.
+- [ ] **Alta de tenant no atómica (`CrearTenant`).** Si falla la escritura del usuario admin, quedan un tenant huérfano y el candado ocupado. Reemplazar las escrituras por una sola `transact_write_items` (candado + tenant + admin). Agregar además un candado por correo para evitar dos registros simultáneos con el mismo correo (hoy solo se verifica con el GSI `correo-index`).
+- [ ] **Cliente eliminado con oportunidades huérfanas.** **[DECIDIR]** entre (a) borrado lógico (`estado: inactivo`) en lugar de borrar la fila, o (b) publicar el evento `cliente.eliminado` y que Oportunidades reaccione. Si se elige (b), agregar el evento al catálogo de la sección 8. Mientras tanto, `EliminarCliente` debe borrar los contactos con `batch_writer()` en vez de uno por uno.
+- [ ] **Robustez de los handlers.**
+  - Un JSON mal formado en el body debe responder 400 y no 500.
+  - Capturar `ConditionalCheckFailedException` en `ActualizarCliente` (hoy no se captura) y en todos los casos de `ActualizarUsuario`.
+  - Impedir que un admin se desactive o se degrade a sí mismo (el tenant no puede quedarse sin admin).
+  - Impedir más de un contacto con `es_principal` verdadero por cliente.
+  - Validar el formato de `responsable_id` en `CrearCliente` y `ActualizarCliente` cuando el rol no es vendedor.
+- [ ] **Código duplicado.** La función `respuesta()` está repetida en varios archivos y algunos handlers (`ListarUsuarios`, `ListarClientes`) no la usan. Moverla a una capa compartida junto con el manejo del body y de las claims del Authorizer, y que todos los servicios la usen.
+- [ ] **Configuración (menor).**
+  - `compartido/serverless.yml` tiene `org` y `app` con el usuario de un solo integrante; parametrizar o quitar, porque cada integrante despliega su propia copia.
+  - Unificar `frameworkVersion` en todos los `serverless.yml`.
+  - Evaluar un GSI por `responsable_id` en `t_clientes` para el listado "mis clientes" del FrontEnd.
