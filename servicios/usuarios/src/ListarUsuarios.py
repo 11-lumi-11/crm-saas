@@ -1,11 +1,12 @@
+from crm_comun import respuesta, claims, manejar_errores
 import boto3
 import os
-import json
 from boto3.dynamodb.conditions import Key
 
+@manejar_errores
 def lambda_handler(event, context):
-    claims = event.get('requestContext', {}).get('authorizer', {}).get('lambda', {})
-    tenant_id = claims.get('tenant_id')
+    identidad = claims(event)
+    tenant_id = identidad.get('tenant_id')
 
     params = event.get('queryStringParameters') or {}
     try:
@@ -28,10 +29,4 @@ def lambda_handler(event, context):
         u.pop('contrasena_hash', None)
 
     ultima = response.get('LastEvaluatedKey')
-    return {
-        'statusCode': 200,
-        'body': json.dumps({
-            'usuarios': usuarios,
-            'siguiente': ultima['usuario_id'] if ultima else None
-        }, default=str)
-    }
+    return respuesta(200, {'usuarios': usuarios, 'siguiente': ultima['usuario_id'] if ultima else None})

@@ -1,9 +1,10 @@
+import os
 from decimal import Decimal
 
 from src.utilidades import (
-    ErrorNegocio, manejar_errores, respuesta, leer_body, obtener_claims, generar_id, ahora, tabla,
-    publicar_evento, validar_texto, validar_monto, validar_probabilidad, validar_moneda,
-    validar_fecha_cierre, PROBABILIDAD_ETAPA
+    ErrorNegocio, manejar_errores, respuesta, leer_body, obtener_claims, generar_id, ahora,
+    confirmar, put, validar_texto, validar_monto, validar_probabilidad, validar_moneda,
+    validar_fecha_cierre, validar_responsable, PROBABILIDAD_ETAPA
 )
 
 
@@ -30,6 +31,7 @@ def lambda_handler(event, context):
     if responsable_id != usuario_id and rol == 'vendedor':
         raise ErrorNegocio(403, 'prohibido', 'Un vendedor no puede asignar otro responsable')
 
+    responsable_id = validar_responsable(responsable_id)
     fecha = ahora()
     oportunidad_id = generar_id('opo')
     item = {
@@ -50,9 +52,8 @@ def lambda_handler(event, context):
     if body.get('fecha_cierre_estimada') is not None:
         item['fecha_cierre_estimada'] = validar_fecha_cierre(body['fecha_cierre_estimada'])
 
-    tabla('TABLE_OPORTUNIDADES').put_item(Item=item)
-
-    publicar_evento('oportunidad.creada', tenant_id, {
+    confirmar([put(os.environ['TABLE_OPORTUNIDADES'], item, 'attribute_not_exists(oportunidad_id)')],
+              'oportunidad.creada', tenant_id, {
         'oportunidad_id': oportunidad_id,
         'cliente_id': cliente_id,
         'titulo': titulo,

@@ -1,6 +1,4 @@
-#modificar el nombre de la org 
-org: percycastro 
-app: crm-saas
+frameworkVersion: '4'
 service: crm-compartido
 
 provider:
@@ -13,12 +11,21 @@ provider:
     role: arn:aws:iam::${aws:accountId}:role/LabRole
   environment:
     JWT_SECRET: ${env:JWT_SECRET}
+    TABLE_USUARIOS: ${sls:stage}-t_usuarios
+    TABLE_TENANTS: ${sls:stage}-t_tenants
 
 package:
   patterns:
     - '!capa_jwt/**'
+    - '!capa_comun/**'
+    - '!**/__pycache__/**'
 
 layers:
+  comun:
+    path: capa_comun
+    name: ${sls:stage}-crm-comun
+    compatibleRuntimes:
+      - python3.14
   pyjwt:
     path: capa_jwt
     name: ${sls:stage}-crm-pyjwt
@@ -49,6 +56,8 @@ resources:
         SourceArn: arn:aws:execute-api:${aws:region}:${aws:accountId}:*/authorizers/*
 
   Outputs:
+    CapaComunArn:
+      Value: !Ref ComunLambdaLayer
     CapaJwtArn:
       Value: !Ref PyjwtLambdaLayer
     AuthorizerArn:

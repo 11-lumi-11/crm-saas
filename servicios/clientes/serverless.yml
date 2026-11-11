@@ -9,6 +9,8 @@ provider:
   timeout: 20
   iam:
     role: arn:aws:iam::${aws:accountId}:role/LabRole
+  layers:
+    - ${cf:crm-compartido-${sls:stage}.CapaComunArn}
   httpApi:
     cors: true
     authorizers:
@@ -24,9 +26,16 @@ provider:
     TABLE_CLIENTES: ${sls:stage}-t_clientes
     TABLE_CONTACTOS: ${sls:stage}-t_contactos
     INDEX_CLIENTE: cliente_id-index
+    TABLE_EVENTOS: ${sls:stage}-t_eventos_clientes
     SNS_TOPIC_ARN: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
 
 functions:
+  publicarEventos:
+    handler: crm_comun.eventos.lambda_handler
+    timeout: 60
+    reservedConcurrency: 1
+    events:
+      - schedule: rate(1 minute)
 
   crearCliente:
     handler: src/CrearCliente.lambda_handler
@@ -93,6 +102,34 @@ functions:
 
 resources:
   Resources:
+    TablaEventos:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_EVENTOS}
+        AttributeDefinitions:
+          - AttributeName: evento_id
+            AttributeType: S
+          - AttributeName: estado
+            AttributeType: S
+          - AttributeName: fecha_creacion
+            AttributeType: S
+        KeySchema:
+          - AttributeName: evento_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: estado-fecha-index
+            KeySchema:
+              - AttributeName: estado
+                KeyType: HASH
+              - AttributeName: fecha_creacion
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        TimeToLiveSpecification:
+          AttributeName: expira_en
+          Enabled: true
+        BillingMode: PAY_PER_REQUEST
+
     TablaClientes:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -102,11 +139,22 @@ resources:
             AttributeType: S
           - AttributeName: cliente_id
             AttributeType: S
+          - AttributeName: responsable_id
+            AttributeType: S
         KeySchema:
           - AttributeName: tenant_id
             KeyType: HASH
           - AttributeName: cliente_id
             KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: responsable_id-index
+            KeySchema:
+              - AttributeName: tenant_id
+                KeyType: HASH
+              - AttributeName: responsable_id
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
 
     TablaContactos:
@@ -140,3 +188,4 @@ package:
   patterns:
     - '!.env'
     - '!README.md'
+    - '!**/__pycache__/**'

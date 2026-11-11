@@ -9,7 +9,8 @@ provider:
   timeout: 20
   iam:
     role: arn:aws:iam::${aws:accountId}:role/LabRole
-  layers: 
+  layers:
+    - ${cf:crm-compartido-${sls:stage}.CapaComunArn}
     - ${cf:crm-compartido-${sls:stage}.CapaJwtArn}
   httpApi:
     cors: true
@@ -24,14 +25,22 @@ provider:
         payloadVersion: '2.0'
   environment:
     JWT_SECRET: ${env:JWT_SECRET}
-    JWT_EXPIRACION_HORAS: '8'
+    JWT_EXPIRACION_HORAS: '1'
     TABLE_TENANTS: ${sls:stage}-t_tenants
     TABLE_USUARIOS: ${sls:stage}-t_usuarios
     TABLE_TENANTS_LOCKS: ${sls:stage}-t_tenants_locks
+    TABLE_CORREOS_LOCKS: ${sls:stage}-t_correos_locks
     INDEX_NOMBRE: nombre_normalizado-index
+    TABLE_EVENTOS: ${sls:stage}-t_eventos_usuarios
     SNS_TOPIC_ARN: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
 
 functions:
+  publicarEventos:
+    handler: crm_comun.eventos.lambda_handler
+    timeout: 60
+    reservedConcurrency: 1
+    events:
+      - schedule: rate(1 minute)
 
   # POST /tenants (público)
   crearTenant:
@@ -78,9 +87,37 @@ functions:
           method: put
           authorizer:
             name: authorizerJwt
-            
+
 resources:
   Resources:
+    TablaEventos:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_EVENTOS}
+        AttributeDefinitions:
+          - AttributeName: evento_id
+            AttributeType: S
+          - AttributeName: estado
+            AttributeType: S
+          - AttributeName: fecha_creacion
+            AttributeType: S
+        KeySchema:
+          - AttributeName: evento_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: estado-fecha-index
+            KeySchema:
+              - AttributeName: estado
+                KeyType: HASH
+              - AttributeName: fecha_creacion
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        TimeToLiveSpecification:
+          AttributeName: expira_en
+          Enabled: true
+        BillingMode: PAY_PER_REQUEST
+
     # Tabla 1: Tenants (con GSI para verificar nombre de empresa duplicado)
     TablaTenants:
       Type: AWS::DynamoDB::Table
@@ -116,6 +153,18 @@ resources:
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
 
+    TablaCorreosLocks:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_CORREOS_LOCKS}
+        AttributeDefinitions:
+          - AttributeName: correo
+            AttributeType: S
+        KeySchema:
+          - AttributeName: correo
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
     # Tabla 2: Usuarios (con GSI para búsqueda por correo en el Login)
     TablaUsuarios:
       Type: AWS::DynamoDB::Table
@@ -146,3 +195,4 @@ package:
   patterns:
     - '!.env'
     - '!README.md'
+    - '!**/__pycache__/**'

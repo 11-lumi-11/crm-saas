@@ -1,5 +1,5 @@
 import os
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
 from src.utilidades import (
@@ -30,7 +30,7 @@ def lambda_handler(event, context):
     if filtros.get('etapa') is not None and filtros['etapa'] not in ETAPAS:
         raise ErrorNegocio(400, 'etapa_invalida', 'Etapa no permitida')
 
-    consulta = {'Limit': limite}
+    consulta = {'Limit': limite, 'FilterExpression': Attr('fecha_eliminacion').not_exists()}
     if filtros:
         campo, valor = next(iter(filtros.items()))
         consulta['IndexName'] = os.environ[FILTROS[campo]]

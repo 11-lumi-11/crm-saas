@@ -1,7 +1,7 @@
 from src.utilidades import (
     ErrorNegocio, manejar_errores, respuesta, leer_body, obtener_claims, ahora, tabla, dynamodb,
     leer_oportunidad, validar_texto, validar_monto, validar_probabilidad, validar_moneda,
-    validar_fecha_cierre, ETAPAS_CERRADAS
+    validar_fecha_cierre, validar_responsable, ETAPAS_CERRADAS
 )
 
 VALIDADORES = {
@@ -10,7 +10,7 @@ VALIDADORES = {
     'moneda': validar_moneda,
     'probabilidad': validar_probabilidad,
     'fecha_cierre_estimada': validar_fecha_cierre,
-    'responsable_id': lambda v: validar_texto(v, 'responsable_id'),
+    'responsable_id': validar_responsable,
     'cliente_nombre': lambda v: validar_texto(v, 'cliente_nombre')
 }
 NO_EDITABLES = ('etapa', 'cliente_id')
@@ -58,7 +58,7 @@ def lambda_handler(event, context):
             UpdateExpression='SET ' + ', '.join(cambios),
             ExpressionAttributeValues=valores,
             ExpressionAttributeNames=nombres,
-            ConditionExpression='attribute_exists(oportunidad_id) AND NOT (#c_etapa IN (:ganada, :perdida))',
+            ConditionExpression='attribute_exists(oportunidad_id) AND attribute_not_exists(fecha_eliminacion) AND NOT (#c_etapa IN (:ganada, :perdida))',
             ReturnValues='ALL_NEW'
         )
     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:

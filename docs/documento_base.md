@@ -2,7 +2,63 @@
 
 *CS2032 Cloud Computing · Proyecto Final · Ciclo 2026-2*
 
-> **Estado:** borrador para revisión del grupo. Todo lo marcado como **\[CONFIRMAR\]** es una propuesta que el grupo debe aprobar antes de empezar a programar. Una vez aprobado, este documento es la **única fuente de verdad**: si algo cambia, se cambia aquí primero y se avisa al grupo.
+> **Guía vigente del repositorio · actualización: 2026-11-11.** Este documento reúne el contrato funcional, el estado de implementación y la evidencia de validación. Una funcionalidad descrita no implica que esté implementada o probada en AWS. Los cambios de contrato se registran aquí junto con su implementación; los acuerdos pendientes se señalan como **[DECIDIR]**.
+
+## 0. Estado actual y cómo usar esta guía
+
+### Tres estados que se registran por separado
+
+- **Diseñado:** existe un contrato de datos, rutas o eventos en este documento. Puede tener decisiones pendientes.
+- **Implementado:** existe código y configuración en el repositorio. Su validación local se indica por separado.
+- **Verificado en AWS:** hay evidencia de ejecución del caso con fecha, cuenta o entorno, stage y resultado. Un archivo de Serverless o una colección Postman no constituyen esa evidencia.
+
+La revisión del 2026-11-11 y sus pruebas son locales. **No se ha acreditado aquí ningún despliegue ni flujo completo en AWS.** Si el grupo ya realizó pruebas, debe incorporar sus evidencias en la sección 14.
+
+### Inventario del repositorio
+
+| Componente | Diseñado | Implementado en código | Validación local | Verificado en AWS |
+| --- | --- | --- | --- | --- |
+| Compartido: JWT, Authorizer, SNS, capas | Sí | Sí; Authorizer comprueba identidad vigente | Pruebas de JWT, estado, rol e infraestructura | Pendiente de evidencia |
+| Usuarios y Tenants | Sí | Registro atómico, login, gestión de usuarios, candados de correo y outbox | Pruebas de registro, conflictos, migración de hash y protección de admins | Pendiente de evidencia |
+| Clientes y contactos | Sí | CRUD con borrado lógico; contacto principal atómico; filtro por responsable; outbox | Pruebas de permisos, validaciones, archivo y conflictos | Pendiente de evidencia |
+| Oportunidades | Sí | Pipeline, historial, borrado lógico, outbox y consumidor SQS | Importaciones, transacción de cierre y reintentos del consumidor | Pendiente de evidencia |
+| Notificaciones | Contrato inicial; faltan decisiones de lectura por rol | No; archivos vacíos | No aplica | Pendiente |
+| Productos y Cotizaciones | Contrato inicial | No | No aplica | Pendiente |
+| Actividades | Contrato inicial | No | No aplica | Pendiente |
+| Generación/carga de datos ficticios | Requisitos definidos | `generar_datos.py` y `cargar_datos.py` vacíos; sí existe migración de integridad | Migración cubierta por pruebas locales | Pendiente |
+| Frontend Amplify | Visión funcional | No hay código en este repositorio | No aplica | Pendiente |
+| Pruebas y herramientas | Colección Postman y validación local | Suite local ejecutada y omitida del remoto por ser material de trabajo | Ver [validación local](validacion_local.md) | Postman pendiente de ejecución documentada |
+
+### Correcciones realizadas el 2026-11-11
+
+| Problema anterior | Corrección implementada | Evidencia o límite |
+| --- | --- | --- |
+| `src.utilidades` no coincidía con `Utilidades.py` | Archivo renombrado a `utilidades.py` | Todos los handlers se importan en la suite local |
+| SHA-256 sin sal | PBKDF2-HMAC-SHA256, 600,000 iteraciones y sal aleatoria por contraseña | Nuevos registros seguros; hashes SHA-256 existentes migran al iniciar sesión correctamente |
+| Un JWT seguía habilitado tras desactivación o cambio de rol | Authorizer lee usuario y tenant con consistencia fuerte en cada petición; TTL de caché 0; JWT nuevo dura 1 hora | Usuario inactivo, rol distinto o tenant suspendido rechazan acceso; petición ya autorizada puede terminar |
+| Tenant y admin podían quedar parcialmente registrados | Una transacción guarda tenant, candado de nombre, usuario, candado de correo y evento pendiente | Fallos condicionales de correo/nombre devuelven 409; falta prueba real de concurrencia en AWS |
+| Correos duplicados por peticiones simultáneas | `t_correos_locks` global; usado por CrearTenant y CrearUsuario en la misma transacción | Datos existentes necesitan `datos/migrar_integridad.py` con escrituras pausadas |
+| Un admin podía desactivarse o quitarse su rol | 409 `autoproteccion_admin`; cambios a otros usuarios comprueban que el solicitante sigue siendo admin activo dentro de la transacción | Evita también dos admins desactivándose mutuamente; 404 si el usuario objetivo desaparece |
+| JSON incorrecto provocaba fallos no controlados | Capa `crm_comun`: body objeto JSON, manejo de base64, claims, respuestas y errores de negocio | Usuarios, Clientes y Oportunidades usan la misma capa |
+| ActualizarCliente no capturaba fallo condicional | Traduce carrera con borrado a 404; condición comprueba que el registro no está archivado | Prueba local del fallo condicional |
+| Más de un contacto principal | `contacto_principal_id` en cliente reservado junto con el contacto en una transacción | Segundo principal devuelve 409; `es_principal` exige booleano; migrar datos existentes |
+| Responsable inválido | Se exige `usr_` seguido de caracteres alfanuméricos; se conserva la restricción del vendedor | No acredita que ese usuario exista: no se consulta la base de otro servicio |
+| Borrado físico dejaba referencias huérfanas | Clientes y Oportunidades se archivan con `eliminado` y `fecha_eliminacion`; contactos e historial se conservan | GET/edición/listado habitual excluyen archivados; no hay borrado en cascada ni evento de eliminación |
+| Cambios guardados sin evento si fallaba SNS | Outbox por servicio: dato + evento en transacción; publicador programado cada minuto reintenta los pendientes | Entrega al menos una vez; consumidores deben deduplicar; no garantiza orden global |
+| Configuración ligada a un integrante | Se quitaron `org`/`app` del stack compartido; todos usan Framework 4 y capa común | AWS Academy/LabRole y programación del publicador requieren verificación real |
+| Listado “mis clientes” sin índice | GSI `responsable_id-index` y filtro `GET /clientes?responsable_id=usr_...` | El GSI y su construcción sobre datos existentes requieren despliegue |
+| `cliente_nombre` podía quedar desactualizado | Se conserva como instantánea opcional, y se documenta como limitación aceptada de esta versión | No se implementa sincronización ni evento `cliente.actualizado` |
+
+### Próximos pasos
+
+1. Desplegar y migrar estas correcciones en un entorno de prueba; completar la matriz de la sección 14.
+2. Implementar **Notificaciones**, definiendo primero deduplicación por evento/destino y lectura individual de avisos por rol.
+3. Implementar **Productos y Cotizaciones**, para conectar `cotizacion.aceptada` con Oportunidades.
+4. Implementar **Actividades**, y avanzar en paralelo con frontend, datos coherentes, informe y demo.
+
+### Regla de mantenimiento
+
+Cada contribución que cambie comportamiento actualiza: contrato de la sección 7 u 8, inventario anterior, historial de la sección 12, pruebas locales y evidencia AWS cuando exista. Registrar responsable y fecha de la evidencia. No marcar **verificado en AWS** basándose únicamente en revisión de código o mocks.
 
 ## 1. Para qué sirve este documento
 
@@ -48,7 +104,7 @@ Son 3 tenants. La demo se hace con 2 de ellos.
 | `ten_electro` | ElectroHogar | Venta de electrodomésticos |
 | `ten_consultora` | SoftNova Consultores | Consultoría de software |
 
-**\[CONFIRMAR\]** Demo con `ten_seguros` y `ten_electro`.
+**Decisión:** demo con `ten_seguros` y `ten_electro`.
 
 ## 4. Visión general de microservicios
 
@@ -66,18 +122,18 @@ Otras piezas del grupo: **FrontEnd (Amplify)**, **Diagrama de arquitectura**, **
 ### Principios que valen para todos
 
 1. **Cada microservicio tiene su propia base de datos.** Nadie lee ni escribe la base de otro servicio.
-2. **Para conocer algo de otro servicio se usan identificadores o eventos**, nunca llamadas directas entre funciones Lambda.
+2. **Para conocer algo de otro servicio se usan identificadores o eventos**, nunca llamadas directas entre funciones Lambda. El Authorizer pertenece a la infraestructura de identidad y puede consultar las tablas de Usuarios y Tenants para comprobar el acceso vigente; ningún microservicio de negocio consulta tablas ajenas.
 3. **El tenant siempre sale del token** (ya verificado), nunca de lo que escriba el usuario en la petición.
 4. **Todo dato guardado lleva su `tenant_id`.**
 
 ## 5. Seguridad: autenticación y autorización
 
 - **Autenticación (quién eres):** el usuario envía correo y contraseña al servicio 1. Si son correctos, recibe un **token JWT** que contiene `usuario_id`, `tenant_id` y `rol`, con tiempo de expiración.
-- **Validación:** API Gateway (HTTP API) detiene cada petición protegida y ejecuta el **Lambda Authorizer**, que revisa que el token sea auténtico y no esté vencido. Si no lo es, la petición se rechaza y el servicio **nunca se ejecuta**. Si lo es, el servicio recibe la petición con `tenant_id`, `usuario_id` y `rol`.
+- **Validación:** API Gateway (HTTP API) detiene cada petición protegida y ejecuta el **Lambda Authorizer**, que revisa firma y expiración y lee el usuario y tenant actuales con consistencia fuerte. Exige ambos activos y que el rol del token coincida con el rol vigente. La caché está deshabilitada. Si no lo es, la petición se rechaza y el servicio **nunca se ejecuta**. Si lo es, el servicio recibe la petición con `tenant_id`, `usuario_id` y `rol`.
 - **Autorización (qué puedes hacer):** cada servicio revisa el `rol` según la tabla de permisos.
 - **Rutas públicas** (sin token): solo `POST /usuarios/login` y el registro de una nueva empresa. **Todo lo demás es protegido.**
-- **Clave secreta del token:** variable de entorno `JWT_SECRET` (nunca en el código ni en el repositorio). Todos los servicios y el authorizer usan la misma.
-- **Hash de contraseña:** por ahora SHA-256. **\[VERIFICAR\]** si el curso exige un algoritmo más fuerte (bcrypt o similar).
+- **Clave secreta del token:** variable de entorno `JWT_SECRET` (nunca en código ni repositorio), utilizada por Usuarios para emitir tokens y por el Authorizer para verificarlos. Los demás servicios reciben las claims verificadas; no necesitan la clave.
+- **Contraseñas:** PBKDF2-HMAC-SHA256 con 600,000 iteraciones y sal aleatoria de 16 bytes. Se guarda `pbkdf2_sha256$iteraciones$sal$hash` en `contrasena_hash`. Los SHA-256 previos solo se admiten para verificar y migrar tras un login correcto. No se devuelve el hash en respuestas. Los JWT nuevos expiran en 1 hora; tokens anteriores conservan su expiración pero pasan la comprobación del estado y rol actuales.
 - **Códigos 401 vs 403 del token:** el Flujo 8 pide 401 si falta el token y 403 si está vencido o alterado. Con HTTP API y respuestas simples del authorizer, API Gateway puede devolver el mismo rechazo en ambos casos. **\[VERIFICAR\]** en una prueba real y ajustar si hace falta.
 
 ### Permisos por rol
@@ -92,7 +148,7 @@ Otras piezas del grupo: **FrontEnd (Amplify)**, **Diagrama de arquitectura**, **
 | Gestionar productos (crear, editar, desactivar) | ✘ | ✔ | ✔ |
 | Crear y desactivar usuarios | ✘ | ✘ | ✔ |
 
-**\[CONFIRMAR\]** esta matriz. *(Se agregó la fila "Cambiar la etapa de una oportunidad" para dejar explícito lo que ya implicaba la fila de crear y editar; ver sección 12.)*
+**Decisión:** matriz aprobada según sección 13. *(Se agregó la fila "Cambiar la etapa de una oportunidad" para dejar explícito lo que ya implicaba la fila de crear y editar; ver sección 12.)*
 
 ## 6. Reglas de nombres (obligatorias para todos)
 
@@ -128,7 +184,7 @@ Se siguen las convenciones usadas en clase (`t_usuarios`, `t_productos`, `CrearU
 | Notificación | `not_` | `not_000654` |
 | Evento | `evt_` | `evt_000987` |
 
-En los datos ficticios los números son secuenciales para que los servicios sean coherentes entre sí (una oportunidad debe apuntar a un `cliente_id` que **sí exista**). Al crear datos desde la aplicación, el identificador puede generarse de otra forma, pero **siempre con su prefijo y siempre como texto**. *(Oportunidades genera `opo_` / `his_` + 8 caracteres hexadecimales, igual que Clientes con `cli_`.)*
+En los datos ficticios los números son secuenciales para que los servicios sean coherentes entre sí (una oportunidad debe apuntar a un `cliente_id` que **sí exista**). Al crear datos desde la aplicación, el identificador puede generarse de otra forma, pero **siempre con su prefijo y siempre como texto**. Los registros nuevos usan el prefijo de entidad más UUID hexadecimal completo; siguen admitiéndose los identificadores anteriores y los secuenciales del generador.
 
 ### Campos comunes en todas las tablas
 
@@ -139,6 +195,8 @@ En los datos ficticios los números son secuenciales para que los servicios sean
 Para cada servicio: qué hace, qué no hace, qué guarda, qué rutas ofrece y qué eventos publica o escucha. La base es **DynamoDB** (NoSQL) en todos los servicios. El enunciado permite elegir SQL o NoSQL según convenga a cada servicio, y elegimos DynamoDB porque es nativo de serverless, no hay un servidor de base de datos que administrar y el aislamiento por tenant se resuelve con el tenant\_id en la clave. Si algún servicio necesitara SQL, el enunciado exige un único RDS con el patrón Single Database, Multiple Schemas y presentar su diagrama entidad-relación. Con DynamoDB, cada tabla se presenta como estructura JSON en el informe; aquí se describe como lista de campos.
 
 ### 7.1 Usuarios y Tenants
+
+**Estado:** diseñado e implementado; validación local parcial según sección 14. Verificación AWS pendiente de evidencia.
 
 **Qué hace:** registra empresas y usuarios, hace el login, entrega el token y administra los roles.
 
@@ -164,7 +222,11 @@ Candado para que dos registros simultáneos no creen la misma empresa. No es una
 | `nombre_normalizado` | Clave única. Si ya existe, el registro se rechaza |
 | `fecha_creacion` | Cuándo se tomó el candado |
 
-Al registrar un tenant se escribe primero el candado (con condición de que no exista). Si después falla el alta del tenant, se borra el candado.
+El candado de nombre, el de correo, el tenant, el primer admin y su evento pendiente se escriben en una sola transacción; todo se guarda o nada se guarda.
+
+**Tabla `t_correos_locks`**: clave `correo` normalizado; campos `tenant_id`, `usuario_id`. Un correo queda reservado globalmente mediante escritura condicional. No se ofrece cambio de correo ni eliminación física de usuarios; desactivar no libera el correo. Antes de habilitar las nuevas escrituras sobre una instalación existente, ejecutar la migración de integridad con escrituras pausadas.
+
+**Gestión de admins:** un admin no puede desactivarse ni quitarse su rol. Al cambiar otro usuario, la transacción comprueba que el solicitante sigue activo y con rol admin; esto impide que dos admins se desactiven mutuamente. Error propio: 409 `autoproteccion_admin`.
 
 **Tabla `t_usuarios`**
 
@@ -173,8 +235,8 @@ Al registrar un tenant se escribe primero el candado (con condición de que no e
 | `tenant_id` | A qué empresa pertenece |
 | `usuario_id` | Identificador del usuario |
 | `nombre` | Nombre completo |
-| `correo` | Correo de acceso. **\[CONFIRMAR\]** único en todo el sistema, para que el login solo pida correo y contraseña |
-| `contrasena_hash` | Contraseña cifrada (nunca en texto plano) |
+| `correo` | Correo de acceso. **Decisión:** único en todo el sistema, para que el login solo pida correo y contraseña |
+| `contrasena_hash` | Hash PBKDF2 con sal y parámetros (nunca texto plano; no es cifrado reversible) |
 | `rol` | `admin`, `gerente`, `vendedor` |
 | `estado` | `activo`, `inactivo` |
 | `fecha_creacion` | Fecha de alta |
@@ -191,9 +253,11 @@ Al registrar un tenant se escribe primero el candado (con condición de que no e
 
 **Eventos:** publica `usuario.creado`. No escucha ninguno.
 
-**\[VERIFICAR\]** Usuarios ya publica en el topic SNS compartido, pero todavía no hay colas SQS ni servicio de Notificaciones que consuma. Cuando exista el consumidor, confirmar que el mensaje llega y que el atributo `tipo` permite filtrar.
+**Implementado:** Usuarios guarda `usuario.creado` en su outbox transaccional; el publicador programado lo envía al SNS compartido. Notificaciones aún no existe. **AWS pendiente:** comprobar publicación, reintento, atributo `tipo` y consumo cuando esté implementado.
 
 ### 7.2 Clientes
+
+**Estado:** diseñado e implementado; validación local parcial según sección 14. Verificación AWS pendiente de evidencia.
 
 **Qué hace:** guarda las cuentas del tenant y sus contactos.
 
@@ -226,9 +290,17 @@ Al registrar un tenant se escribe primero el candado (con condición de que no e
 
 **Rutas principales:** `POST /clientes`, `GET /clientes`, `GET /clientes/{cliente_id}`, `PUT /clientes/{cliente_id}`, `DELETE /clientes/{cliente_id}`, `POST /clientes/{cliente_id}/contactos`, `GET /clientes/{cliente_id}/contactos`. Todas protegidas (HTTP API + Lambda Authorizer). Un vendedor no puede eliminar ni reasignar `responsable_id`. Si el `responsable_id` no se envía al crear, se usa el `usuario_id` del token.
 
-**Eventos:** publica `cliente.creado`. No escucha ninguno. **\[VERIFICAR\]** igual que Usuarios: el evento se publica; el consumo queda para Notificaciones.
+**Eventos:** guarda `cliente.creado` en el outbox junto con el cliente y lo publica de forma diferida. No escucha eventos. **AWS pendiente:** verificar publicación y consumo cuando exista Notificaciones.
+
+**Borrado lógico:** DELETE conserva el cliente con `eliminado: true`, `fecha_eliminacion`, `estado: inactivo` y `fecha_actualizacion`. Conserva los contactos; no elimina datos de otros servicios ni publica un evento. La consulta individual, edición y operaciones de contactos responden 404 para un cliente archivado. Los listados excluyen registros con `fecha_eliminacion`; una página puede estar vacía y aun tener `siguiente`, porque DynamoDB filtra después de evaluar el límite. El consumidor debe continuar mientras haya cursor.
+
+**Contacto principal:** `t_clientes.contacto_principal_id` es un campo técnico opcional. Crear un contacto principal reserva ese campo y guarda el contacto en una sola transacción; si ya hay principal, devuelve 409 `contacto_principal_existente`. No existe todavía una ruta para cambiar el principal. `es_principal` solo admite booleanos. El script de migración detecta duplicados previos y exige resolverlos antes de aplicar.
+
+**Filtro de responsable:** `GET /clientes?responsable_id=usr_...`, usando el GSI `responsable_id-index` (`tenant_id` + `responsable_id`, proyección completa). Conservar el filtro durante la paginación.
 
 ### 7.3 Oportunidades
+
+**Estado:** diseñado e implementado; validación local parcial según sección 14. Verificación AWS pendiente de evidencia.
 
 **Qué hace:** gestiona el pipeline de ventas. Registra cada oportunidad, su monto, su etapa y el historial de cambios de etapa. Es el servicio central del CRM.
 
@@ -259,7 +331,7 @@ Al registrar un tenant se escribe primero el candado (con condición de que no e
 
 | Campo | Descripción |
 | --- | --- |
-| `tenant_id`, `oportunidad_id` | Identificación (`opo_` + 8 caracteres hexadecimales) |
+| `tenant_id`, `oportunidad_id` | Identificación (`opo_` + UUID hexadecimal) |
 | `cliente_id` | Cliente al que se le intenta vender |
 | `cliente_nombre` | *(opcional)* Copia del nombre del cliente para mostrar listas sin consultar Clientes. No se mantiene sincronizada si el cliente cambia de nombre |
 | `titulo` | Descripción corta |
@@ -283,7 +355,7 @@ Al registrar un tenant se escribe primero el candado (con condición de que no e
 
 | Campo | Descripción |
 | --- | --- |
-| `tenant_id`, `historial_id` | Identificación (`his_` + 8 caracteres hexadecimales) |
+| `tenant_id`, `historial_id` | Identificación (`his_` + UUID hexadecimal) |
 | `oportunidad_id` | A qué oportunidad pertenece |
 | `etapa_anterior`, `etapa_nueva` | Cambio realizado |
 | `usuario_id` | Quién lo hizo. Vale `sistema` cuando el cambio lo hizo el consumidor de `cotizacion.aceptada` |
@@ -291,7 +363,7 @@ Al registrar un tenant se escribe primero el candado (con condición de que no e
 
 Índice `oportunidad_id-index`: `tenant_id` + `oportunidad_id` (historial de una oportunidad).
 
-Los montos se guardan como número decimal en DynamoDB y se devuelven como número JSON (entero si no tiene decimales), no como texto.
+Los montos se guardan como número decimal en DynamoDB y se devuelven como número JSON (entero si no tiene decimales). Las oportunidades archivadas se excluyen del listado y de las consultas/ediciones habituales (404). Se conserva el historial almacenado para auditoría; la ruta de historial requiere una oportunidad no archivada. Un listado filtrado puede devolver una página vacía con cursor: continuar mientras haya `siguiente`.
 
 **Rutas principales** (todas protegidas)
 
@@ -303,7 +375,7 @@ Los montos se guardan como número decimal en DynamoDB y se devuelven como núme
 | `PUT /oportunidades/{oportunidad_id}` | `ActualizarOportunidad` | Edita `titulo`, `monto_estimado`, `moneda`, `probabilidad`, `fecha_cierre_estimada`, `responsable_id`, `cliente_nombre`. **No** permite cambiar `etapa` ni `cliente_id` (400 `campo_no_editable`). No aplica a oportunidades cerradas |
 | `PUT /oportunidades/{oportunidad_id}/etapa` | `CambiarEtapa` | Body: `etapa` y, si es `perdida`, `motivo_perdida` |
 | `GET /oportunidades/{oportunidad_id}/historial` | `ListarHistorial` | Cambios de etapa ordenados por `fecha_cambio` ascendente. Sin paginación. 404 si la oportunidad no existe en el tenant |
-| `DELETE /oportunidades/{oportunidad_id}` | `EliminarOportunidad` | Solo gerente o admin. Borra su historial y luego la oportunidad. **No publica evento** |
+| `DELETE /oportunidades/{oportunidad_id}` | `EliminarOportunidad` | Solo gerente o admin. Archiva la oportunidad con `eliminado: true` y `fecha_eliminacion`, conservando el historial. **No publica evento** |
 
 **Códigos de error propios de este servicio** (todos con formato `{"codigo": "...", "mensaje": "..."}`):
 
@@ -323,7 +395,7 @@ Los montos se guardan como número decimal en DynamoDB y se devuelven como núme
 | 409 | `oportunidad_cerrada` | Editar o cambiar de etapa una oportunidad `ganada` o `perdida` |
 | 409 | `conflicto_etapa` | Otro cambio de etapa se adelantó; reintentar |
 
-**Eventos que publica** (formato común de la sección 8):
+**Eventos que produce** (guardados en el outbox junto con el cambio de negocio, y publicados por el proceso programado; formato de sección 8):
 
 - `oportunidad.creada` al crear.
 - `oportunidad.etapa_cambiada` en un cambio entre etapas **abiertas**.
@@ -338,15 +410,17 @@ Los montos se guardan como número decimal en DynamoDB y se devuelven como núme
 
 1. Una cola SQS propia (con cola de errores DLQ tras 3 intentos) recibe una copia del evento. La suscripción al topic filtra por el atributo `tipo = cotizacion.aceptada` y la cola solo acepta mensajes de ese topic.
 2. El consumidor toma el `tenant_id` **del evento** y el `oportunidad_id` de `datos`.
-3. Si la oportunidad no existe o ya está cerrada, lo registra y sigue (idempotente, porque SQS entrega al menos una vez).
-4. Si está abierta, la pasa a `ganada` con la misma lógica que el cambio manual (queda en el historial con `usuario_id = sistema`) y publica `oportunidad.ganada`.
+3. Si la oportunidad no existe, está archivada o ya está cerrada, lo registra y sigue (idempotente, porque SQS entrega al menos una vez).
+4. Si está abierta, pasa a `ganada`, guarda historial con `usuario_id = sistema` y guarda el evento `oportunidad.ganada` en una misma transacción. El publicador programado envía después el evento. Si se reentrega el mensaje, el cierre existente evita repetir historial y evento.
 5. Si hay un conflicto de etapa o un error inesperado, el mensaje se reintenta y, tras 3 intentos, va a la DLQ.
 
-Esta cadena termina aquí: el consumidor no publica ningún otro evento.
+Esta reacción produce únicamente `oportunidad.ganada`, mediante el outbox; no produce además `oportunidad.etapa_cambiada`.
 
 **\[VERIFICAR\]** Es el primer servicio con consumidor SQS. Al desplegar, comprobar primero que la política de la cola y la suscripción con su filtro dejan pasar el mensaje, antes de probar el resto. Mientras no exista Cotizaciones, se puede probar publicando a mano en el topic un evento `cotizacion.aceptada` con el atributo `tipo` y un `oportunidad_id` real.
 
 ### 7.4 Actividades
+
+**Estado:** diseño inicial; no implementado ni verificado en AWS. Las rutas y eventos siguientes son el contrato previsto.
 
 **Qué hace:** gestiona el seguimiento comercial: llamadas, reuniones, correos y tareas, con fecha y responsable. Algunas se crean a mano y otras automáticamente por eventos.
 
@@ -372,6 +446,8 @@ Esta cadena termina aquí: el consumidor no publica ningún otro evento.
 **Eventos:** publica `actividad.completada`. Escucha `oportunidad.etapa_cambiada`, `oportunidad.ganada`, `oportunidad.perdida`, `cotizacion.enviada`.
 
 ### 7.5 Productos y Cotizaciones
+
+**Estado:** diseño inicial; no implementado ni verificado en AWS. Las rutas y eventos siguientes son el contrato previsto.
 
 **Qué hace:** mantiene el catálogo de lo que vende el tenant y permite armar cotizaciones para una oportunidad.
 
@@ -410,6 +486,8 @@ Los ítems guardan una copia del nombre y el precio al momento de cotizar, para 
 
 ### 7.6 Notificaciones
 
+**Estado:** diseño inicial; no implementado ni verificado en AWS. Las rutas y eventos siguientes son el contrato previsto.
+
 **Qué hace:** escucha eventos de los demás servicios y registra avisos para los usuarios. Los usuarios consultan sus avisos y los marcan como leídos.
 
 **Qué NO hace:** no decide ni cambia nada en el negocio. Solo reacciona.
@@ -427,6 +505,8 @@ Los ítems guardan una copia del nombre y el precio al momento de cotizar, para 
 | `leida` | Verdadero/falso |
 | `fecha_creacion` | Cuándo se generó |
 
+**[DECIDIR antes de implementar]:** los avisos por rol necesitan un registro de lectura por usuario; una única bandera `leida` no representa lecturas individuales. El esquema de esta sección es inicial. También debe definirse la deduplicación por evento y destinatario.
+
 **Decisión de diseño:** como Notificaciones no puede consultar la base de Usuarios, un aviso se dirige a un usuario concreto (cuando el evento trae su `usuario_id`, como `responsable_id`) **o a un rol** (por ejemplo, todos los gerentes del tenant). Al consultar, cada usuario ve los avisos dirigidos a él o a su rol.
 
 **Rutas principales:** `GET /notificaciones`, `PUT /notificaciones/{notificacion_id}/leer`.
@@ -437,11 +517,28 @@ Los ítems guardan una copia del nombre y el precio al momento de cotizar, para 
 
 Un servicio **publica** un anuncio en **SNS** (el altavoz). Cada servicio interesado tiene su **cola SQS** (el buzón) y recibe una copia. Quien publica no sabe quién escucha.
 
+### Publicación confiable implementada: outbox por servicio
+
+Usuarios, Clientes y Oportunidades tienen cada uno su tabla `t_eventos_<servicio>` (el nombre desplegado lleva el stage). No se comparte la tabla entre servicios.
+
+| Campo | Uso |
+| --- | --- |
+| `evento_id` | Clave de la tabla; se conserva en todos los reintentos |
+| `tenant_id` | Tenant del evento |
+| `estado` | `pendiente` o `enviado` |
+| `fecha_creacion` | Fecha UTC del evento |
+| `evento` | Sobre completo con `datos` |
+| `expira_en` | TTL numérico, solo para enviados; limpieza después de 7 días |
+
+El GSI `estado-fecha-index` usa `estado` + `fecha_creacion` y proyección completa. El dato de negocio y el evento pendiente se escriben en una transacción de DynamoDB. Cada servicio configura un publicador de la capa común (`crm_comun.eventos.lambda_handler`), ejecutado cada minuto y con concurrencia reservada 1. Consulta los pendientes, publica en SNS con atributo `tipo`, y solo tras éxito marca `enviado`. Un fallo mantiene el evento pendiente sin TTL, para reintentar. La latencia normal incluye el intervalo del publicador y la consistencia eventual del índice; no es publicación inmediata ni un SLA.
+
+**Semántica:** entrega al menos una vez, sin orden global garantizado. Si SNS recibe el mensaje y falla el marcado de enviado, se publicará otra vez con el mismo `evento_id`. Los consumidores futuros deben deduplicar por `tenant_id` + `evento_id` y destino cuando corresponda. Oportunidades evita un segundo cierre porque la etapa final se confirma atómicamente. No hay consumidores de Actividades o Notificaciones implementados todavía. Al desplegar, verificar permisos de EventBridge, concurrencia reservada, transacciones y acceso a las tablas con LabRole. Supervisar eventos pendientes y errores del publicador; alarmas operativas aún pendientes.
+
 ### Formato común de todo evento
 
 | Campo | Descripción |
 | --- | --- |
-| `evento_id` | Identificador único del evento (`evt_` + 8 caracteres) |
+| `evento_id` | Identificador único del evento (`evt_` + UUID hexadecimal) |
 | `tipo` | Nombre del evento, por ejemplo `oportunidad.ganada` |
 | `tenant_id` | A qué empresa pertenece (**siempre presente**) |
 | `fecha` | Cuándo ocurrió |
@@ -479,7 +576,7 @@ Cuidado con los ciclos: Oportunidades escucha una cotización aceptada y publica
 
 ## 9. Flujos de uso
 
-Estos flujos son la base de la demo y de las pruebas. Cada integrante debe poder explicar el flujo donde participa su servicio.
+Estos flujos describen el comportamiento objetivo; no son evidencia de implementación ni de ejecución. Incluyen servicios todavía pendientes (ver inventario de sección 0). Son la base de la demo y de las pruebas. Cada integrante debe poder explicar el flujo donde participa su servicio.
 
 ### Flujo 1: Una empresa nueva se registra
 
@@ -547,10 +644,11 @@ Casos que deben comportarse así y que se prueban en la demo:
 
 ## 10. Datos ficticios
 
-- Mínimo **30,000 registros por microservicio**, repartidos en los 3 tenants (unos 10,000 por tenant). **\[CONFIRMAR\]** tabla principal de cada servicio con 30,000 o más: `t_usuarios`, `t_clientes`, `t_oportunidades`, `t_actividades`, `t_cotizaciones` (con `t_productos` en su misma base) y `t_notificaciones`.
+- Mínimo **30,000 registros por microservicio**, repartidos en los 3 tenants (unos 10,000 por tenant). **Decisión registrada:** tabla principal de cada servicio con 30,000 o más: `t_usuarios`, `t_clientes`, `t_oportunidades`, `t_actividades`, `t_cotizaciones` (con `t_productos` en su misma base) y `t_notificaciones`.
 - **Los datos deben ser coherentes entre servicios:** toda oportunidad apunta a un `cliente_id` que existe en el mismo tenant; toda cotización a una oportunidad existente; todo `responsable_id` a un usuario existente.
 - Por eso el orden de generación es: usuarios y tenants, luego clientes, luego oportunidades, luego actividades y cotizaciones, luego notificaciones. **Una sola persona** genera todos los datos con un mismo programa para garantizar coherencia.
-- La cantidad de usuarios por tenant (10,000) es poco realista, pero cumple el mínimo. **\[CONFIRMAR\]** con el profesor si se acepta o si prefieren otra distribución.
+- La cantidad de usuarios por tenant (10,000) es poco realista, pero cumple el mínimo. La distribución figura aprobada en la sección 13; conservar la evidencia del acuerdo del grupo y verificar el cumplimiento del enunciado con el profesor.
+- **Estado:** generación y carga masiva todavía no implementadas. El futuro generador debe importar `crm_comun.contrasenas.crear_hash` (agregando `compartido/capa_comun/python` a `PYTHONPATH`), crear los candados de correo y mantener coherente `contacto_principal_id`. El único script de datos funcional por ahora es `datos/migrar_integridad.py`.
 - **Para Oportunidades:** el generador (`datos/generar_datos.py`) debe respetar las reglas del servicio: `monto_estimado` numérico con `moneda` `PEN` o `USD`; `probabilidad` coherente con la etapa; `motivo_perdida` solo en las `perdida`; y, si se carga `t_historial_etapas`, que cada oportunidad tenga cambios de etapa coherentes con su etapa actual (`usuario_id` de un usuario existente). `cliente_nombre` es opcional.
 
 ## 11. Cómo trabajamos como grupo
@@ -565,10 +663,10 @@ Casos que deben comportarse así y que se prueban en la demo:
 
 - Cada integrante tiene su propia cuenta de AWS, así que **cada quien despliega su propia copia** con el mismo código y la misma configuración de Serverless Framework.
 - Cada servicio tiene su propio archivo de configuración de Serverless Framework.
-- Nombres de recursos y etapas de despliegue idénticos para todos (a definir en un documento técnico aparte).
+- Nombres de recursos definidos en `serverless.yml`: servicios `crm-compartido`, `crm-usuarios`, `crm-clientes`, `crm-oportunidades`; tablas con prefijo `${sls:stage}-`. Usar el mismo stage al desplegar todos los stacks de una cuenta (por ejemplo `dev`). Región actual `us-east-1`, runtime Python 3.14, Framework 4 y LabRole de AWS Academy.
 - **Prueba temprana obligatoria:** antes de programar nada serio, todos despliegan un ejemplo mínimo para confirmar que pueden hacerlo en sus cuentas de AWS Academy.
 - Para la demo, un solo integrante despliega todo en su cuenta.
-- **Orden de despliegue:** primero `compartido` (authorizer y topic SNS) y después los servicios, porque estos leen el topic y el authorizer desde los outputs de `compartido`.
+- **Orden de despliegue:** primero `compartido` (authorizer, capas y topic SNS), luego Usuarios, Clientes y Oportunidades. Cada servicio lee los outputs del compartido. Tras cambiar una capa, volver a desplegar los servicios para usar la versión nueva. En instalación nueva el Authorizer rechaza hasta que existan las tablas y la identidad. Para actualizar datos existentes, pausar escrituras, desplegar y ejecutar la migración antes de reabrir. Ver [validación y despliegue](validacion_local.md).
 
 ### Trabajo en paralelo
 
@@ -592,10 +690,14 @@ Una vez aprobado este documento, se puede avanzar a la vez en:
 
 ## 12. Cambios a este documento
 
-Cualquier cambio de nombres, campos, rutas o eventos se hace **primero aquí** y se avisa al grupo. Quien necesite algo de otro servicio lo pide a su responsable y se registra en esta sección.
+El historial conserva decisiones anteriores aunque luego hayan sido reemplazadas. El contrato vigente está en las secciones 0, 5, 7 y 8; por ejemplo, el borrado físico y los IDs de 8 caracteres de las entradas del 10-nov fueron sustituidos el 11-nov.
+
+Cualquier cambio de nombres, campos, rutas o eventos se documenta aquí junto con el código antes de integrar la contribución, y se comunica al grupo. Quien necesite algo de otro servicio lo pide a su responsable y se registra en esta sección.
 
 | Fecha | Qué cambió | Quién |
 | --- | --- | --- |
+| 2026-11-11 | Corrección de importaciones; capa común HTTP/claims; PBKDF2 con migración en login; Authorizer con estado/rol vigente y JWT nuevo de 1h; transacciones de alta y candado global de correo; protección de admins también ante cambios simultáneos; validación de responsables y contacto principal atómico; borrado lógico de Clientes/Oportunidades; outbox transaccional con reintentos; GSI de responsable; Framework 4 y configuración compartida sin org personal. Se añadieron migración de integridad y pruebas locales. | Implementación asistida; revisión del grupo pendiente |
+| 2026-11-11 | Documento reorganizado para distinguir diseñado, implementado, validado localmente y verificado en AWS; inventario, registro de correcciones, límites y matriz de evidencias. Próximo servicio: Notificaciones. | Implementación asistida; revisión del grupo pendiente |
 | 2026-11-04 | Candado `t_tenants_locks` y campo `nombre_normalizado` para no duplicar empresas. Advertencias a verificar: 401 vs 403 del authorizer, hash SHA-256, eventos SNS sin consumidores todavía. | Castro |
 | 2026-11-10 | **Oportunidades – ruta nueva:** `DELETE /oportunidades/{oportunidad_id}` (solo gerente/admin; borra el historial y la oportunidad; no publica evento). Sale de la matriz de permisos, pero no estaba en la lista de rutas. Se agregó la fila "Cambiar la etapa de una oportunidad" a la matriz (sin cambiar permisos). | Castro |
 | 2026-11-10 | **Oportunidades – campo nuevo:** `cliente_nombre` (opcional) en `t_oportunidades`, para mostrar listas en el FrontEnd sin consultar Clientes. | Castro |
@@ -615,34 +717,51 @@ Cualquier cambio de nombres, campos, rutas o eventos se hace **primero aquí** y
 - [x] Confirmar la distribución de los 30,000 registros por servicio (sección 10).
 - [x] Confirmar que todos los servicios usan DynamoDB (el enunciado permite SQL o NoSQL por servicio).
 
-## 14. Para verificar más adelante
+## 14. Validación, pendientes y evidencia AWS
 
-- [ ] **401 vs 403:** petición sin cabecera `Authorization` → 401; token vencido o alterado → 403. Probar contra HTTP API + authorizer de respuestas simples y ajustar si API Gateway unifica ambos rechazos.
-- [ ] **Hash de contraseña:** SHA-256 es lo que usa Usuarios hoy. Cambiar a bcrypt (u otro) si el enunciado o el profesor lo piden.
-- [ ] **Consumo de eventos:** Usuarios y Clientes publican en el topic SNS compartido (`usuario.creado`, `cliente.creado`). Cuando existan las colas SQS de Notificaciones (y las demás), comprobar suscripción, filtro por atributo `tipo` y el formato del mensaje.
-- [ ] **Oportunidades – primer despliegue con SQS:** si falla, revisar primero la política de la cola (`PoliticaColaCotizacionAceptada`) y la suscripción con su filtro. Confirmar que el mensaje llega a la cola antes de probar el resto. Probar el consumidor publicando a mano un `cotizacion.aceptada` con el atributo `tipo` y un `oportunidad_id` real.
-- [ ] **Oportunidades – Cotizaciones debe publicar con el atributo `tipo`.** Si no, el filtro descarta `cotizacion.aceptada` sin error y la oportunidad nunca pasa a `ganada` por esa vía.
-- [ ] **Oportunidades – eliminación sin evento.** `DELETE /oportunidades/{id}` no publica evento, así que puede dejar cotizaciones o actividades huérfanas. Es el mismo problema que `EliminarCliente`; **[DECIDIR]** ambos juntos (borrado lógico o evento `oportunidad.eliminada` / `cliente.eliminado`).
-- [ ] **Oportunidades – `cliente_nombre` desactualizado.** Es una copia; si el cliente cambia de nombre, las oportunidades existentes no se actualizan. Aceptarlo como limitación o definir un evento `cliente.actualizado`.
-- [ ] **Oportunidades – confirmar con el grupo** los supuestos de la sección 12 que no estaban en el documento original: etapas solo hacia adelante con saltos permitidos, probabilidad por etapa, `ganada` manual, tope de monto y `campo_no_editable`.
+### Evidencia local
 
+La validación local cubrió contratos HTTP, hashes, Authorizer, conflictos de registro/edición, protección de admins, contacto principal, borrado lógico, outbox, cierre de oportunidades, reentregas SQS y resolución de handlers/configuración. Usó dobles de prueba de boto3; **no demuestra transacciones reales, permisos, tiempos de ejecución ni integración AWS**. Se complementó con compilación y análisis estático. El código de pruebas y sus dependencias se mantienen fuera del remoto por ser material local; el resultado está descrito en [validacion_local.md](validacion_local.md).
 
-### Pendientes de corrección tras la revisión de Usuarios y Clientes
+### Matriz que debe completarse en AWS
 
-Se corrigen antes de empezar el siguiente microservicio. Los marcados como **[DECIDIR]** requieren acuerdo del grupo y, una vez decididos, se registran en la sección 12.
+Todos los casos están pendientes de evidencia en este documento. Al ejecutar, registrar fecha, responsable, cuenta/entorno, stage, pasos, resultado y enlace al registro o captura sin secretos.
 
-- [ ] **Token vigente tras desactivar a un usuario.** El Authorizer solo valida el JWT y no consulta la base, así que un usuario con `estado: inactivo` sigue entrando hasta que el token venza (8 horas). **[DECIDIR]** reducir `JWT_EXPIRACION_HORAS` a 1 o 2, o aceptarlo y documentarlo como limitación conocida en el informe.
-- [ ] **Hash de contraseña.** SHA-256 sin sal es débil. Reemplazar por `hashlib.scrypt` o `hashlib.pbkdf2_hmac` (librería estándar de Python, sin capa adicional), con sal aleatoria guardada junto al hash. Afecta a `CrearTenant`, `CrearUsuario`, `LoginUsuario` y al generador de datos (`datos/generar_datos.py`), que debe usar el mismo algoritmo.
-- [ ] **Alta de tenant no atómica (`CrearTenant`).** Si falla la escritura del usuario admin, quedan un tenant huérfano y el candado ocupado. Reemplazar las escrituras por una sola `transact_write_items` (candado + tenant + admin). Agregar además un candado por correo para evitar dos registros simultáneos con el mismo correo (hoy solo se verifica con el GSI `correo-index`).
-- [ ] **Cliente eliminado con oportunidades huérfanas.** **[DECIDIR]** entre (a) borrado lógico (`estado: inactivo`) en lugar de borrar la fila, o (b) publicar el evento `cliente.eliminado` y que Oportunidades reaccione. Si se elige (b), agregar el evento al catálogo de la sección 8 y un consumidor en Oportunidades. Mientras tanto, `EliminarCliente` debe borrar los contactos con `batch_writer()` en vez de uno por uno.
-- [ ] **Robustez de los handlers.**
-  - Un JSON mal formado en el body debe responder 400 y no 500. *(Ya resuelto en Oportunidades con `json_invalido`; falta aplicarlo en Usuarios y Clientes.)*
-  - Capturar `ConditionalCheckFailedException` en `ActualizarCliente` (hoy no se captura) y en todos los casos de `ActualizarUsuario`. *(Ya resuelto en Oportunidades.)*
-  - Impedir que un admin se desactive o se degrade a sí mismo (el tenant no puede quedarse sin admin).
-  - Impedir más de un contacto con `es_principal` verdadero por cliente.
-  - Validar el formato de `responsable_id` en `CrearCliente` y `ActualizarCliente` cuando el rol no es vendedor.
-- [ ] **Código duplicado.** La función `respuesta()` está repetida en varios archivos y algunos handlers (`ListarUsuarios`, `ListarClientes`) no la usan. Moverla a una capa compartida junto con el manejo del body y de las claims del Authorizer, y que todos los servicios la usen. *(Oportunidades ya concentra todo en `src/utilidades.py` con `respuesta()`, `leer_body()`, `obtener_claims()` y el decorador de errores; sirve como modelo para esa capa compartida.)*
-- [ ] **Configuración (menor).**
-  - `compartido/serverless.yml` tiene `org` y `app` con el usuario de un solo integrante; parametrizar o quitar, porque cada integrante despliega su propia copia.
-  - Unificar `frameworkVersion` en todos los `serverless.yml`.
-  - Evaluar un GSI por `responsable_id` en `t_clientes` para el listado "mis clientes" del FrontEnd.
+| Caso | Resultado esperado | Estado AWS / evidencia |
+| --- | --- | --- |
+| Desplegar compartido y los tres servicios | Capas/importaciones, tablas, GSI, Authorizer y publicadores disponibles con LabRole | Pendiente |
+| Auditar y aplicar migración sobre datos existentes | Ningún correo/principal duplicado; candados coherentes; rerun idempotente | Pendiente |
+| Login nuevo y login con SHA-256 anterior | Token; hash antiguo migra a PBKDF2 sin cambiar contraseña | Pendiente |
+| Token ausente, vencido o alterado | Sin token: 401; inválido/vencido: 403 según HTTP API; servicio no se ejecuta | Pendiente; el código local no acredita códigos de API Gateway |
+| Usuario desactivado / rol cambiado / tenant suspendido | Token anterior rechazado en siguiente autorización; rol cambiado exige nuevo login | Pendiente |
+| Altas simultáneas con mismo correo/nombre | Solo una exitosa; otra 409; ninguna fila parcial ni evento de alta fallida | Pendiente |
+| Admin se desactiva o se degrada | 409; permanece activo/admin | Pendiente |
+| Dos admins intentan desactivarse mutuamente | Una transacción pierde su condición; queda al menos un admin activo | Pendiente |
+| JSON inválido y datos de tipo incorrecto | 400 con `codigo` y `mensaje` | Pendiente |
+| Crear dos principales simultáneamente | Uno 201, otro 409; una sola referencia principal | Pendiente |
+| Aislamiento y permisos con dos tenants | Listados separados; IDs ajenos 404; vendedor no elimina ni reasigna | Pendiente |
+| Archivar cliente/oportunidad y recorrer listados | Referencias conservadas; archivados no visibles; paginación continúa aun si una página queda vacía | Pendiente |
+| Caída temporal de SNS/publicador | Negocio y evento pendientes guardados; posterior publicación con mismo ID y atributo `tipo` | Pendiente |
+| Cola SQS de Oportunidades y DLQ | Suscripción y política permiten SNS; 3 intentos; errores parciales solo reintentan fallidos | Pendiente |
+| Publicar `cotizacion.aceptada` manualmente con atributo `tipo` | Cierre + historial `sistema` + evento pendiente `oportunidad.ganada`; reentrega no duplica cierre | Pendiente |
+| Consumidores futuros de Notificaciones/Actividades | Deduplicación y aislamiento; verificar cuando existan | No implementados |
+
+### Trabajo funcional pendiente
+
+- [ ] **Notificaciones:** definir lectura por usuario de avisos por rol, deduplicación por evento y destinatario, índices, cola/DLQ, consumidor y las dos rutas. La bandera global `leida` del diseño inicial no basta para lectura individual por rol.
+- [ ] **Productos y Cotizaciones:** implementar catálogo, cálculos con decimal, transiciones, permisos y eventos; adoptar outbox y atributo SNS `tipo`.
+- [ ] **Actividades:** CRUD, reglas y consumidores idempotentes; definir qué ocurre con seguimientos frente a eventos retrasados o fuera de orden.
+- [ ] **Datos, frontend, informe y demo:** implementar generador/cargador coherentes y mínimo acordado de registros; integrar interfaz y documentar arquitectura/resultados.
+- [ ] **Acuerdos del grupo:** responsables por servicio, hitos sin fecha y revisión de decisiones del 10-nov (etapas solo hacia adelante, saltos, ganada manual, probabilidad, tope de monto y campos no editables).
+
+### Límites explícitos de la versión actual
+
+- `cliente_nombre` es una instantánea opcional y puede quedar desactualizado. No hay sincronización automática.
+- Los servicios guardan identificadores ajenos sin comprobar existencia en tablas de otros servicios. El frontend/generador debe usar referencias válidas del mismo tenant.
+- Archivar conserva referencias pero no cancela actividades ni invalida cotizaciones: esos servicios aún no existen. No hay ruta de restauración ni purga.
+- Las tablas de eventos proporcionan entrega al menos una vez; no orden global ni deduplicación automática en consumidores futuros. Aún faltan alarmas de acumulación de pendientes y DLQ.
+- El Authorizer añade dos lecturas consistentes a cada autorización y rechaza si la base de identidad no está disponible. Una petición ya autorizada puede terminar tras una desactivación; un token aún vigente puede volver a servir si se reactiva al usuario con el mismo rol. No se implementa revocación permanente por sesión.
+- PBKDF2 se ejecuta en los registros y en el login/migración. Medir latencia y memoria en Lambda antes de la demo; no hay medidas AWS en esta revisión.
+- El candado de correo y el principal de contacto exigen migración previa sobre instalaciones existentes; el script no resuelve duplicados por sí solo y no se ha ejecutado en AWS.
+- Los GSI y SNS/SQS tienen procesamiento asíncrono. Durante la propagación pueden observarse listados anteriores; los cambios usan condiciones/transacciones para proteger las escrituras.
+- El cursor actual exige mantener los filtros entre páginas; no está firmado ni contiene el filtro original. Una paginación de producción necesitaría un cursor ligado a la consulta.

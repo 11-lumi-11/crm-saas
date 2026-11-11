@@ -1,21 +1,19 @@
+from crm_comun import respuesta, claims, manejar_errores
 import boto3
 import os
-import json
 from boto3.dynamodb.conditions import Key
 
-def respuesta(codigo_http, cuerpo):
-    return {'statusCode': codigo_http, 'body': json.dumps(cuerpo, default=str)}
-
+@manejar_errores
 def lambda_handler(event, context):
-    claims = event.get('requestContext', {}).get('authorizer', {}).get('lambda', {})
-    tenant_id = claims.get('tenant_id')
+    identidad = claims(event)
+    tenant_id = identidad.get('tenant_id')
     cliente_id = (event.get('pathParameters') or {}).get('cliente_id')
 
     dynamodb = boto3.resource('dynamodb')
     cliente = dynamodb.Table(os.environ['TABLE_CLIENTES']).get_item(
         Key={'tenant_id': tenant_id, 'cliente_id': cliente_id}
     ).get('Item')
-    if not cliente:
+    if not cliente or cliente.get('eliminado'):
         return respuesta(404, {'codigo': 'no_encontrado', 'mensaje': 'El cliente no existe'})
 
     params = event.get('queryStringParameters') or {}

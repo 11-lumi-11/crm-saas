@@ -9,6 +9,8 @@ provider:
   timeout: 20
   iam:
     role: arn:aws:iam::${aws:accountId}:role/LabRole
+  layers:
+    - ${cf:crm-compartido-${sls:stage}.CapaComunArn}
   httpApi:
     cors: true
     authorizers:
@@ -27,9 +29,16 @@ provider:
     INDEX_RESPONSABLE: responsable_id-index
     INDEX_ETAPA: etapa-index
     INDEX_HISTORIAL: oportunidad_id-index
+    TABLE_EVENTOS: ${sls:stage}-t_eventos_oportunidades
     SNS_TOPIC_ARN: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
 
 functions:
+  publicarEventos:
+    handler: crm_comun.eventos.lambda_handler
+    timeout: 60
+    reservedConcurrency: 1
+    events:
+      - schedule: rate(1 minute)
 
   crearOportunidad:
     handler: src/CrearOportunidad.lambda_handler
@@ -106,6 +115,34 @@ functions:
 
 resources:
   Resources:
+    TablaEventos:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_EVENTOS}
+        AttributeDefinitions:
+          - AttributeName: evento_id
+            AttributeType: S
+          - AttributeName: estado
+            AttributeType: S
+          - AttributeName: fecha_creacion
+            AttributeType: S
+        KeySchema:
+          - AttributeName: evento_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: estado-fecha-index
+            KeySchema:
+              - AttributeName: estado
+                KeyType: HASH
+              - AttributeName: fecha_creacion
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        TimeToLiveSpecification:
+          AttributeName: expira_en
+          Enabled: true
+        BillingMode: PAY_PER_REQUEST
+
     TablaOportunidades:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -229,3 +266,4 @@ package:
   patterns:
     - '!.env'
     - '!README.md'
+    - '!**/__pycache__/**'
