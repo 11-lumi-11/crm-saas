@@ -1,0 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root { --background: 0 0% 98%; --foreground: 222 47% 11%; --card: 0 0% 100%; --muted: 220 14% 96%; --border: 220 13% 91%; --primary: 239 84% 67%; }
+  .dark { --background: 222 47% 8%; --foreground: 210 40% 98%; --card: 222 47% 11%; --muted: 217 33% 17%; --border: 217 25% 20%; --primary: 239 84% 67%; }
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground antialiased; }
+  button, input, select { font: inherit; }
+}
+@layer utilities { .text-muted-foreground { @apply text-slate-500 dark:text-slate-400; } }
