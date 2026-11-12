@@ -756,13 +756,13 @@ Todos los casos están pendientes de evidencia en este documento. Al ejecutar, r
 | Caída temporal de SNS/publicador | Negocio y evento pendientes guardados; posterior publicación con mismo ID y atributo `tipo` | Pendiente |
 | Cola SQS de Oportunidades y DLQ | Suscripción y política permiten SNS; 3 intentos; errores parciales solo reintentan fallidos | Pendiente |
 | Publicar `cotizacion.aceptada` manualmente con atributo `tipo` | Cierre + historial `sistema` + evento pendiente `oportunidad.ganada`; reentrega no duplica cierre | Pendiente |
-| Notificaciones: evento real de Usuarios/Clientes | Aviso visible para el destinatario tras el intervalo del publicador; reentrega no duplica | Pendiente |
-| Notificaciones: aviso a rol y lectura individual | Dos gerentes ven el aviso; uno lo lee y el otro lo sigue viendo como no leído | Pendiente |
-| Notificaciones: mensaje dañado | 3 intentos y luego DLQ; el resto del lote se procesa | Pendiente |
+| Notificaciones: evento real de Usuarios/Clientes | Aviso visible para el destinatario tras el intervalo del publicador; reentrega no duplica | Validado |
+| Notificaciones: aviso a rol y lectura individual | Dos gerentes ven el aviso; uno lo lee y el otro lo sigue viendo como no leído | Validado |
+| Notificaciones: mensaje dañado | 3 intentos y luego DLQ; el resto del lote se procesa | Validado |
 
 ### Trabajo funcional pendiente
 
-- [x] **Notificaciones:** implementado (pendiente evidencia AWS).
+- [x] **Notificaciones:** implementado (Validado evidencia AWS).
 - [ ] **Productos y Cotizaciones:** implementar catálogo, cálculos con decimal, transiciones, permisos y eventos; adoptar outbox y atributo SNS `tipo`.
 - [ ] **Actividades:** CRUD, reglas y consumidores idempotentes; definir qué ocurre con seguimientos frente a eventos retrasados o fuera de orden.
 - [ ] **Datos, frontend, informe y demo:** implementar generador/cargador coherentes y mínimo acordado de registros; integrar interfaz y documentar arquitectura/resultados.
