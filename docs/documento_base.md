@@ -23,7 +23,7 @@ La revisión del 2026-11-11 y sus pruebas son locales. **No se ha acreditado aqu
 | Clientes y contactos | Sí | CRUD con borrado lógico; contacto principal atómico; filtro por responsable; outbox | Pruebas de permisos, validaciones, archivo y conflictos | Pendiente de evidencia |
 | Oportunidades | Sí | Pipeline, historial, borrado lógico, outbox y consumidor SQS | Importaciones, transacción de cierre y reintentos del consumidor | Pendiente de evidencia |
 | Notificaciones | Sí | Consumidor SQS con DLQ, deduplicación por evento y destino, lectura individual por usuario, `GET /notificaciones` y `PUT /notificaciones/{notificacion_id}/leer` | Pruebas locales con boto3 simulado: sobre SNS, duplicados, aislamiento por tenant, lectura por rol, paginación y errores | Pendiente de evidencia | 
-| Productos y Cotizaciones | Contrato inicial | No | No aplica | Pendiente |
+| Productos y Cotizaciones | Sí | Catálogo con permisos de gestión, cotizaciones con copia de precios y total decimal, transiciones condicionales borrador → enviada → aceptada/rechazada, vencimiento, borrado lógico y outbox | Pruebas locales con moto (DynamoDB y SNS/SQS simulados): permisos, validaciones, aislamiento por tenant, transiciones, outbox, publicador con atributo `tipo` y consumo de `cotizacion.aceptada` por Oportunidades | Pendiente de evidencia |
 | Actividades | Contrato inicial | No | No aplica | Pendiente |
 | Generación/carga de datos ficticios | Requisitos definidos | `generar_datos.py` y `cargar_datos.py` vacíos; sí existe migración de integridad | Migración cubierta por pruebas locales | Pendiente |
 | Frontend Amplify | Visión funcional | No hay código en este repositorio | No aplica | Pendiente |
@@ -447,42 +447,70 @@ Esta reacción produce únicamente `oportunidad.ganada`, mediante el outbox; no 
 
 ### 7.5 Productos y Cotizaciones
 
-**Estado:** diseño inicial; no implementado ni verificado en AWS. Las rutas y eventos siguientes son el contrato previsto.
+**Estado:** implementado; validado localmente; pendiente de evidencia en AWS. Carpeta `servicios/productos_cotizaciones`, stack `crm-productos-cotizaciones`. Productos y cotizaciones comparten una sola HTTP API (`VITE_PRODUCTOS_URL` en el frontend, `productos_url` en Postman).
 
 **Qué hace:** mantiene el catálogo de lo que vende el tenant y permite armar cotizaciones para una oportunidad.
 
-**Qué NO hace:** no cambia el estado de la oportunidad directamente; solo avisa con eventos.
+**Qué NO hace:** no cambia el estado de la oportunidad directamente; solo avisa con eventos. No consulta Oportunidades ni Clientes, así que **no valida que `oportunidad_id` o `cliente_id` existan** (solo su prefijo `opo_` / `cli_`). Sí lee su propia tabla de productos al cotizar.
 
-**Tabla `t_productos`**
+**Tabla `t_productos`** (clave: `tenant_id` + `producto_id`)
 
 | Campo | Descripción |
 | --- | --- |
-| `tenant_id`, `producto_id` | Identificación |
-| `nombre`, `descripcion`, `categoria` | Datos del producto |
-| `precio`, `moneda` | Precio de lista |
-| `estado` | `activo`, `inactivo` |
+| `tenant_id`, `producto_id` | Identificación (`pro_` + UUID hexadecimal) |
+| `nombre`, `descripcion`, `categoria` | Datos del producto (`nombre` obligatorio) |
+| `precio`, `moneda` | Precio de lista (0 a 10¹², redondeado a 2 decimales) y moneda `PEN` o `USD` (por defecto `PEN`) |
+| `estado` | `activo`, `inactivo` (por defecto `activo`) |
 | `fecha_creacion`, `fecha_actualizacion` | Fechas |
 
-**Tabla `t_cotizaciones`**
+Los productos no se borran: se desactivan con `PUT /productos/{producto_id}` y `{"estado": "inactivo"}`. Un producto inactivo no se puede agregar a cotizaciones nuevas; las cotizaciones existentes no cambian.
+
+**Tabla `t_cotizaciones`** (clave: `tenant_id` + `cotizacion_id`)
 
 | Campo | Descripción |
 | --- | --- |
-| `tenant_id`, `cotizacion_id` | Identificación |
+| `tenant_id`, `cotizacion_id` | Identificación (`cot_` + UUID hexadecimal) |
 | `oportunidad_id`, `cliente_id` | A qué venta y cliente corresponde |
 | `estado` | `borrador`, `enviada`, `aceptada`, `rechazada` |
 | `items` | Lista incrustada en la misma cotización; cada ítem lleva `producto_id`, `nombre_producto`, `cantidad`, `precio_unitario`, `subtotal` |
-| `total`, `moneda` | Monto total |
-| `fecha_vencimiento` | Hasta cuándo es válida |
-| `creada_por` | `usuario_id` |
+| `total`, `moneda` | Suma de subtotales (2 decimales) y moneda de la cotización |
+| `fecha_vencimiento` | Hasta cuándo es válida (ISO 8601 UTC; por defecto 15 días después de crearla) |
+| `creada_por` | `usuario_id` de quien la creó (sale del token) |
+| `fecha_envio` | Cuándo pasó a `enviada` |
+| `fecha_respuesta`, `respondida_por` | Cuándo y quién la marcó `aceptada` o `rechazada` |
+| `motivo_rechazo` | *(opcional)* Texto enviado al rechazar |
+| `eliminado`, `fecha_eliminacion` | Borrado lógico |
 | `fecha_creacion`, `fecha_actualizacion` | Fechas |
 
-Los ítems guardan una copia del nombre y el precio al momento de cotizar, para que un cambio posterior en el catálogo no altere cotizaciones ya emitidas.
+Índices (proyección completa): `oportunidad_id-index` (`tenant_id` + `oportunidad_id`) y `estado-index` (`tenant_id` + `estado`).
 
-**Rutas principales:** `POST /productos`, `GET /productos`, `PUT /productos/{producto_id}`, `POST /cotizaciones`, `GET /cotizaciones`, `GET /cotizaciones/{cotizacion_id}`, `PUT /cotizaciones/{cotizacion_id}/enviar`, `PUT /cotizaciones/{cotizacion_id}/aceptar`, `PUT /cotizaciones/{cotizacion_id}/rechazar`.
+Los ítems guardan una copia del nombre y el precio al momento de cotizar, para que un cambio posterior en el catálogo no altere cotizaciones ya emitidas. Una cotización admite de 1 a 50 ítems; `cantidad` es entero de 1 a 100,000; no se repite un `producto_id`. Todos los productos deben estar activos y tener la misma moneda que la cotización.
 
-**Eventos:** publica `cotizacion.enviada`, `cotizacion.aceptada`, `cotizacion.rechazada`. No escucha ninguno.
+**Reglas de estado:** `borrador` → `enviada` → `aceptada` o `rechazada`. Solo se envía un borrador; solo se acepta o rechaza una enviada (409 `estado_invalido_cotizacion`). Una cotización vencida no se envía ni se acepta (409 `cotizacion_vencida`); sí se puede rechazar. Cada transición actualiza la cotización y guarda su evento en el outbox en una sola transacción, con la condición de que el estado no haya cambiado (409 `conflicto_estado`). Rechazar **no** pierde la oportunidad (Flujo 5).
 
-**Importante para este servicio:** al publicar en SNS debe incluir el atributo de mensaje `tipo` con el nombre del evento (como hacen Usuarios, Clientes y Oportunidades). Sin ese atributo, el filtro de la suscripción de Oportunidades descarta `cotizacion.aceptada` sin dar ningún error.
+**Permisos:** todos los roles ven el catálogo y ven, crean, envían, aceptan y rechazan cotizaciones. Solo gerente y admin crean y editan productos, y eliminan (archivan) cotizaciones. Una cotización `aceptada` no se puede eliminar (409 `cotizacion_aceptada`).
+
+**Rutas** (todas protegidas)
+
+| Ruta | Lambda | Para qué |
+| --- | --- | --- |
+| `POST /productos` | `CrearProducto` | Gerente/admin. Requeridos `nombre`, `precio`. Opcionales `descripcion`, `categoria`, `moneda`, `estado`. 201 con `producto_id` |
+| `GET /productos` | `ListarProductos` | Paginación `limite`/`siguiente`; filtros opcionales `estado`, `categoria`. Responde `{"productos": [...], "siguiente": ...}` |
+| `GET /productos/{producto_id}` | `ObtenerProducto` | `{"producto": {...}}` o 404. *(Ruta agregada; ver sección 12)* |
+| `PUT /productos/{producto_id}` | `ActualizarProducto` | Gerente/admin. Edita `nombre`, `descripcion`, `categoria`, `precio`, `moneda`, `estado` |
+| `POST /cotizaciones` | `CrearCotizacion` | Requeridos `oportunidad_id`, `cliente_id`, `items` (`[{producto_id, cantidad}]`). Opcionales `moneda`, `fecha_vencimiento` (futura). Crea en `borrador`; 201 con `cotizacion_id`, `total`, `moneda`. No publica evento |
+| `GET /cotizaciones` | `ListarCotizaciones` | Paginación; **un solo** filtro: `oportunidad_id` o `estado` (400 `filtros_incompatibles`). Excluye archivadas |
+| `GET /cotizaciones/{cotizacion_id}` | `ObtenerCotizacion` | `{"cotizacion": {...}}` o 404 |
+| `PUT /cotizaciones/{cotizacion_id}/enviar` | `EnviarCotizacion` | borrador → enviada; publica `cotizacion.enviada` |
+| `PUT /cotizaciones/{cotizacion_id}/aceptar` | `AceptarCotizacion` | enviada → aceptada; publica `cotizacion.aceptada` |
+| `PUT /cotizaciones/{cotizacion_id}/rechazar` | `RechazarCotizacion` | enviada → rechazada; body opcional `motivo_rechazo`; publica `cotizacion.rechazada` |
+| `DELETE /cotizaciones/{cotizacion_id}` | `EliminarCotizacion` | Gerente/admin. Borrado lógico; no publica evento. *(Ruta agregada; ver sección 12)* |
+
+**Códigos de error propios:** `datos_incompletos`, `datos_invalidos`, `estado_invalido`, `producto_no_disponible`, `moneda_incompatible`, `filtros_incompatibles`, `paginacion_invalida` (400); `prohibido` (403); `no_encontrado` (404); `estado_invalido_cotizacion`, `cotizacion_vencida`, `conflicto_estado`, `cotizacion_aceptada` (409). Además los comunes `json_invalido` y `no_autorizado`.
+
+**Eventos:** publica `cotizacion.enviada`, `cotizacion.aceptada`, `cotizacion.rechazada` mediante el outbox `t_eventos_productos_cotizaciones` y el publicador de la capa común, que incluye el atributo SNS `tipo`. `total` viaja como número. No escucha ninguno. El catálogo no publica eventos.
+
+**Límite conocido:** el servicio no impide que dos cotizaciones de la misma oportunidad queden `aceptada`; la segunda no tiene efecto en Oportunidades porque la oportunidad ya está cerrada (su consumidor la omite).
 
 ### 7.6 Notificaciones
 
@@ -529,7 +557,7 @@ Un servicio **publica** un anuncio en **SNS** (el altavoz). Cada servicio intere
 
 ### Publicación confiable implementada: outbox por servicio
 
-Usuarios, Clientes y Oportunidades tienen cada uno su tabla `t_eventos_<servicio>` (el nombre desplegado lleva el stage). No se comparte la tabla entre servicios.
+Usuarios, Clientes, Oportunidades y Productos y Cotizaciones tienen cada uno su tabla `t_eventos_<servicio>` (el nombre desplegado lleva el stage). No se comparte la tabla entre servicios.
 
 | Campo | Uso |
 | --- | --- |
@@ -674,10 +702,10 @@ Casos que deben comportarse así y que se prueban en la demo:
 
 - Cada integrante tiene su propia cuenta de AWS, así que **cada quien despliega su propia copia** con el mismo código y la misma configuración de Serverless Framework.
 - Cada servicio tiene su propio archivo de configuración de Serverless Framework.
-- Nombres de recursos definidos en `serverless.yml`: servicios `crm-compartido`, `crm-usuarios`, `crm-clientes`, `crm-oportunidades`; tablas con prefijo `${sls:stage}-`. Usar el mismo stage al desplegar todos los stacks de una cuenta (por ejemplo `dev`). Región actual `us-east-1`, runtime Python 3.14, Framework 4 y LabRole de AWS Academy.
+- Nombres de recursos definidos en `serverless.yml`: servicios `crm-compartido`, `crm-usuarios`, `crm-clientes`, `crm-oportunidades`, `crm-productos-cotizaciones`, `crm-notificaciones`; tablas con prefijo `${sls:stage}-`. Usar el mismo stage al desplegar todos los stacks de una cuenta (por ejemplo `dev`). Región actual `us-east-1`, runtime Python 3.14, Framework 4 y LabRole de AWS Academy.
 - **Prueba temprana obligatoria:** antes de programar nada serio, todos despliegan un ejemplo mínimo para confirmar que pueden hacerlo en sus cuentas de AWS Academy.
 - Para la demo, un solo integrante despliega todo en su cuenta.
-- **Orden de despliegue:** primero `compartido` (authorizer, capas y topic SNS), luego Usuarios, Clientes y Oportunidades. Cada servicio lee los outputs del compartido. Tras cambiar una capa, volver a desplegar los servicios para usar la versión nueva. En instalación nueva el Authorizer rechaza hasta que existan las tablas y la identidad. Para actualizar datos existentes, pausar escrituras, desplegar y ejecutar la migración antes de reabrir. Ver [validación y despliegue](validacion_local.md).
+- **Orden de despliegue:** primero `compartido` (authorizer, capas y topic SNS), luego Usuarios, Clientes, Oportunidades, Productos y Cotizaciones y Notificaciones. Cada servicio lee los outputs del compartido. Tras cambiar una capa, volver a desplegar los servicios para usar la versión nueva. En instalación nueva el Authorizer rechaza hasta que existan las tablas y la identidad. Para actualizar datos existentes, pausar escrituras, desplegar y ejecutar la migración antes de reabrir. Ver [validación y despliegue](validacion_local.md).
 
 ### Trabajo en paralelo
 
@@ -707,6 +735,7 @@ Cualquier cambio de nombres, campos, rutas o eventos se documenta aquí junto co
 
 | Fecha | Qué cambió | Quién |
 | --- | --- | --- |
+| 2026-11-11 | **Productos y Cotizaciones:** implementación del servicio (sección 7.5). Rutas nuevas `GET /productos/{producto_id}` y `DELETE /cotizaciones/{cotizacion_id}` (archivo lógico, solo gerente/admin, no para aceptadas). Campos nuevos en `t_cotizaciones`: `fecha_envio`, `fecha_respuesta`, `respondida_por`, `motivo_rechazo`, `eliminado`, `fecha_eliminacion`. Reglas: vencimiento por defecto 15 días, vencidas no se envían ni aceptan, productos inactivos o de otra moneda no se cotizan, 1 a 50 ítems. GSI `oportunidad_id-index` y `estado-index`. Outbox `t_eventos_productos_cotizaciones`. Carpeta Postman 5. | *(tu nombre)* |
 | 2026-11-11 | **Notificaciones:** tablas `t_notificaciones` (GSI `destino-index`) y `t_lecturas_notificaciones`; deduplicación por `tenant_id` + `evento_id` + destino; lectura individual por usuario; cola + DLQ + suscripción filtrada; rutas GET y PUT; destinatarios por evento (sección 7.6). | Mathias |    
 | 2026-11-11 | Corrección de importaciones; capa común HTTP/claims; PBKDF2 con migración en login; Authorizer con estado/rol vigente y JWT nuevo de 1h; transacciones de alta y candado global de correo; protección de admins también ante cambios simultáneos; validación de responsables y contacto principal atómico; borrado lógico de Clientes/Oportunidades; outbox transaccional con reintentos; GSI de responsable; Framework 4 y configuración compartida sin org personal. Se añadieron migración de integridad y pruebas locales. | Implementación asistida; revisión del grupo pendiente |
 | 2026-11-11 | Documento reorganizado para distinguir diseñado, implementado, validado localmente y verificado en AWS; inventario, registro de correcciones, límites y matriz de evidencias. Próximo servicio: Notificaciones. | Implementación asistida; revisión del grupo pendiente |
@@ -756,6 +785,9 @@ Todos los casos están pendientes de evidencia en este documento. Al ejecutar, r
 | Caída temporal de SNS/publicador | Negocio y evento pendientes guardados; posterior publicación con mismo ID y atributo `tipo` | Pendiente |
 | Cola SQS de Oportunidades y DLQ | Suscripción y política permiten SNS; 3 intentos; errores parciales solo reintentan fallidos | Pendiente |
 | Publicar `cotizacion.aceptada` manualmente con atributo `tipo` | Cierre + historial `sistema` + evento pendiente `oportunidad.ganada`; reentrega no duplica cierre | Pendiente |
+| Productos: vendedor crea producto / gerente crea y desactiva | 403 / 201 y 200; inactivo no se puede cotizar (400 `producto_no_disponible`) | Pendiente |
+| Cotización: crear, enviar, aceptar con 2 tenants | Total correcto; otro tenant recibe 404; borrador no se acepta (409) | Pendiente |
+| Cadena `cotizacion.aceptada` → Oportunidades | Tras el publicador, la oportunidad queda `ganada` con historial `sistema`; Notificaciones avisa a gerentes | Pendiente |
 | Notificaciones: evento real de Usuarios/Clientes | Aviso visible para el destinatario tras el intervalo del publicador; reentrega no duplica | Validado |
 | Notificaciones: aviso a rol y lectura individual | Dos gerentes ven el aviso; uno lo lee y el otro lo sigue viendo como no leído | Validado |
 | Notificaciones: mensaje dañado | 3 intentos y luego DLQ; el resto del lote se procesa | Validado |
@@ -763,7 +795,7 @@ Todos los casos están pendientes de evidencia en este documento. Al ejecutar, r
 ### Trabajo funcional pendiente
 
 - [x] **Notificaciones:** implementado (Validado evidencia AWS).
-- [ ] **Productos y Cotizaciones:** implementar catálogo, cálculos con decimal, transiciones, permisos y eventos; adoptar outbox y atributo SNS `tipo`.
+- [x] **Productos y Cotizaciones:** implementado y validado localmente; falta evidencia AWS (sección 14).
 - [ ] **Actividades:** CRUD, reglas y consumidores idempotentes; definir qué ocurre con seguimientos frente a eventos retrasados o fuera de orden.
 - [ ] **Datos, frontend, informe y demo:** implementar generador/cargador coherentes y mínimo acordado de registros; integrar interfaz y documentar arquitectura/resultados.
 - [ ] **Acuerdos del grupo:** responsables por servicio, hitos sin fecha y revisión de decisiones del 10-nov (etapas solo hacia adelante, saltos, ganada manual, probabilidad, tope de monto y campos no editables).
