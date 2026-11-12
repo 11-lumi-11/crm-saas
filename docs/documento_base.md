@@ -22,7 +22,7 @@ La revisión del 2026-11-11 y sus pruebas son locales. **No se ha acreditado aqu
 | Usuarios y Tenants | Sí | Registro atómico, login, gestión de usuarios, candados de correo y outbox | Pruebas de registro, conflictos, migración de hash y protección de admins | Pendiente de evidencia |
 | Clientes y contactos | Sí | CRUD con borrado lógico; contacto principal atómico; filtro por responsable; outbox | Pruebas de permisos, validaciones, archivo y conflictos | Pendiente de evidencia |
 | Oportunidades | Sí | Pipeline, historial, borrado lógico, outbox y consumidor SQS | Importaciones, transacción de cierre y reintentos del consumidor | Pendiente de evidencia |
-| Notificaciones | Contrato inicial; faltan decisiones de lectura por rol | No; archivos vacíos | No aplica | Pendiente |
+| Notificaciones | Sí | Consumidor SQS con DLQ, deduplicación por evento y destino, lectura individual por usuario, `GET /notificaciones` y `PUT /notificaciones/{notificacion_id}/leer` | Pruebas locales con boto3 simulado: sobre SNS, duplicados, aislamiento por tenant, lectura por rol, paginación y errores | Pendiente de evidencia | 
 | Productos y Cotizaciones | Contrato inicial | No | No aplica | Pendiente |
 | Actividades | Contrato inicial | No | No aplica | Pendiente |
 | Generación/carga de datos ficticios | Requisitos definidos | `generar_datos.py` y `cargar_datos.py` vacíos; sí existe migración de integridad | Migración cubierta por pruebas locales | Pendiente |
@@ -486,26 +486,36 @@ Los ítems guardan una copia del nombre y el precio al momento de cotizar, para 
 
 ### 7.6 Notificaciones
 
-**Estado:** diseño inicial; no implementado ni verificado en AWS. Las rutas y eventos siguientes son el contrato previsto.
+**Estado:** implementado; validado localmente; pendiente de evidencia en AWS.
 
 **Qué hace:** escucha eventos de los demás servicios y registra avisos para los usuarios. Los usuarios consultan sus avisos y los marcan como leídos.
 
 **Qué NO hace:** no decide ni cambia nada en el negocio. Solo reacciona.
 
-**Tabla `t_notificaciones`**
+**Tabla `t_notificaciones`**: un aviso por evento y destino.
 
 | Campo | Descripción |
 | --- | --- |
-| `tenant_id`, `notificacion_id` | Identificación |
-| `usuario_destino_id` | A quién va dirigida (puede estar vacío) |
-| `rol_destino` | A qué rol va dirigida, por ejemplo `gerente` (puede estar vacío) |
-| `tipo` | Tipo de aviso, igual al nombre del evento que lo originó |
-| `titulo`, `mensaje` | Texto del aviso |
-| `evento_id` | Evento que la originó |
-| `leida` | Verdadero/falso |
-| `fecha_creacion` | Cuándo se generó |
+| `tenant_id`, `notificacion_id` | Identificación. `notificacion_id` = `not_` + 32 caracteres hexadecimales derivados de `tenant_id`, `evento_id` y destino |
+| `usuario_destino_id` | Usuario al que va dirigido (solo en avisos a un usuario) |
+| `rol_destino` | Rol al que va dirigido (solo en avisos a un rol) |
+| `destino` | Interno, para el GSI: `<tenant_id>#usr#<usuario_id>` o `<tenant_id>#rol#<rol>` |
+| `orden` | Interno, para el GSI: `<fecha_creacion>#<notificacion_id>` |
+| `tipo`, `titulo`, `mensaje`, `evento_id`, `fecha_creacion` | Contenido del aviso y evento que lo originó |
 
-**[DECIDIR antes de implementar]:** los avisos por rol necesitan un registro de lectura por usuario; una única bandera `leida` no representa lecturas individuales. El esquema de esta sección es inicial. También debe definirse la deduplicación por evento y destinatario.
+GSI `destino-index`: `destino` + `orden`, proyección completa.
+
+**Tabla `t_lecturas_notificaciones`**: una fila por (aviso, usuario) que lo marcó como leído. Clave `tenant_id` + `lectura_id` (`<notificacion_id>#<usuario_id>`); campos `notificacion_id`, `usuario_id`, `fecha_lectura`. El campo `leida` de la respuesta se calcula por usuario, así que un gerente que lee un aviso dirigido a `gerente` no lo marca como leído para los demás gerentes.
+
+**Deduplicación:** el `notificacion_id` es determinista y se escribe con `attribute_not_exists`. Una reentrega del mismo evento no crea otro aviso ni reinicia lecturas.
+
+**Destinatarios por evento:** `usuario.creado` → `usuario_id`; `cliente.creado`, `oportunidad.creada`, `oportunidad.etapa_cambiada`, `actividad.completada` → `responsable_id`; `oportunidad.ganada`, `oportunidad.perdida` → `responsable_id` y rol `gerente`; `cotizacion.enviada`, `cotizacion.rechazada` → `creada_por`; `cotizacion.aceptada` → rol `gerente`. Si falta el usuario en `datos`, se omite ese destinatario.
+
+**Rutas:** `GET /notificaciones` (parámetros `limite` 1-100, `solo_no_leidas=true`, `siguiente`; responde `notificaciones`, `no_leidas_en_pagina` y `siguiente`); `PUT /notificaciones/{notificacion_id}/leer` (idempotente; 404 `no_encontrado` si el aviso no existe o no está dirigido al usuario ni a su rol).
+
+**Infraestructura:** cola `<stage>-notificaciones` con DLQ `<stage>-notificaciones-dlq` (3 intentos), política que solo permite escribir al topic compartido y suscripción filtrada por `tipo` con los 10 eventos del catálogo, sin entrega en bruto (el consumidor lee el sobre SNS).
+
+**Límites:** con `solo_no_leidas=true` el filtro se aplica sobre la página, que puede venir con menos elementos; `no_leidas_en_pagina` no es un total global.
 
 **Decisión de diseño:** como Notificaciones no puede consultar la base de Usuarios, un aviso se dirige a un usuario concreto (cuando el evento trae su `usuario_id`, como `responsable_id`) **o a un rol** (por ejemplo, todos los gerentes del tenant). Al consultar, cada usuario ve los avisos dirigidos a él o a su rol.
 
@@ -650,6 +660,7 @@ Casos que deben comportarse así y que se prueban en la demo:
 - La cantidad de usuarios por tenant (10,000) es poco realista, pero cumple el mínimo. La distribución figura aprobada en la sección 13; conservar la evidencia del acuerdo del grupo y verificar el cumplimiento del enunciado con el profesor.
 - **Estado:** generación y carga masiva todavía no implementadas. El futuro generador debe importar `crm_comun.contrasenas.crear_hash` (agregando `compartido/capa_comun/python` a `PYTHONPATH`), crear los candados de correo y mantener coherente `contacto_principal_id`. El único script de datos funcional por ahora es `datos/migrar_integridad.py`.
 - **Para Oportunidades:** el generador (`datos/generar_datos.py`) debe respetar las reglas del servicio: `monto_estimado` numérico con `moneda` `PEN` o `USD`; `probabilidad` coherente con la etapa; `motivo_perdida` solo en las `perdida`; y, si se carga `t_historial_etapas`, que cada oportunidad tenga cambios de etapa coherentes con su etapa actual (`usuario_id` de un usuario existente). `cliente_nombre` es opcional.
+- **Para Notificaciones:** cada aviso generado debe incluir `destino` y `orden` con el formato de la sección 7.6; sin ellos no aparece en `GET /notificaciones`. Los avisos deben apuntar a usuarios existentes del mismo tenant. Las lecturas, si se generan, van en `t_lecturas_notificaciones`.
 
 ## 11. Cómo trabajamos como grupo
 
@@ -696,6 +707,7 @@ Cualquier cambio de nombres, campos, rutas o eventos se documenta aquí junto co
 
 | Fecha | Qué cambió | Quién |
 | --- | --- | --- |
+| 2026-11-11 | **Notificaciones:** tablas `t_notificaciones` (GSI `destino-index`) y `t_lecturas_notificaciones`; deduplicación por `tenant_id` + `evento_id` + destino; lectura individual por usuario; cola + DLQ + suscripción filtrada; rutas GET y PUT; destinatarios por evento (sección 7.6). | Mathias |    
 | 2026-11-11 | Corrección de importaciones; capa común HTTP/claims; PBKDF2 con migración en login; Authorizer con estado/rol vigente y JWT nuevo de 1h; transacciones de alta y candado global de correo; protección de admins también ante cambios simultáneos; validación de responsables y contacto principal atómico; borrado lógico de Clientes/Oportunidades; outbox transaccional con reintentos; GSI de responsable; Framework 4 y configuración compartida sin org personal. Se añadieron migración de integridad y pruebas locales. | Implementación asistida; revisión del grupo pendiente |
 | 2026-11-11 | Documento reorganizado para distinguir diseñado, implementado, validado localmente y verificado en AWS; inventario, registro de correcciones, límites y matriz de evidencias. Próximo servicio: Notificaciones. | Implementación asistida; revisión del grupo pendiente |
 | 2026-11-04 | Candado `t_tenants_locks` y campo `nombre_normalizado` para no duplicar empresas. Advertencias a verificar: 401 vs 403 del authorizer, hash SHA-256, eventos SNS sin consumidores todavía. | Castro |
@@ -744,11 +756,13 @@ Todos los casos están pendientes de evidencia en este documento. Al ejecutar, r
 | Caída temporal de SNS/publicador | Negocio y evento pendientes guardados; posterior publicación con mismo ID y atributo `tipo` | Pendiente |
 | Cola SQS de Oportunidades y DLQ | Suscripción y política permiten SNS; 3 intentos; errores parciales solo reintentan fallidos | Pendiente |
 | Publicar `cotizacion.aceptada` manualmente con atributo `tipo` | Cierre + historial `sistema` + evento pendiente `oportunidad.ganada`; reentrega no duplica cierre | Pendiente |
-| Consumidores futuros de Notificaciones/Actividades | Deduplicación y aislamiento; verificar cuando existan | No implementados |
+| Notificaciones: evento real de Usuarios/Clientes | Aviso visible para el destinatario tras el intervalo del publicador; reentrega no duplica | Pendiente |
+| Notificaciones: aviso a rol y lectura individual | Dos gerentes ven el aviso; uno lo lee y el otro lo sigue viendo como no leído | Pendiente |
+| Notificaciones: mensaje dañado | 3 intentos y luego DLQ; el resto del lote se procesa | Pendiente |
 
 ### Trabajo funcional pendiente
 
-- [ ] **Notificaciones:** definir lectura por usuario de avisos por rol, deduplicación por evento y destinatario, índices, cola/DLQ, consumidor y las dos rutas. La bandera global `leida` del diseño inicial no basta para lectura individual por rol.
+- [x] **Notificaciones:** implementado (pendiente evidencia AWS).
 - [ ] **Productos y Cotizaciones:** implementar catálogo, cálculos con decimal, transiciones, permisos y eventos; adoptar outbox y atributo SNS `tipo`.
 - [ ] **Actividades:** CRUD, reglas y consumidores idempotentes; definir qué ocurre con seguimientos frente a eventos retrasados o fuera de orden.
 - [ ] **Datos, frontend, informe y demo:** implementar generador/cargador coherentes y mínimo acordado de registros; integrar interfaz y documentar arquitectura/resultados.

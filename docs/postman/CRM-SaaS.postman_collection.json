@@ -1,21 +1,73 @@
 {
   "info": {
-    "name": "CRM SaaS — Usuarios + Clientes",
+    "name": "CRM SaaS — Usuarios + Clientes + Oportunidades",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "usuarios_url", "value": "https://6ge9waha1h.execute-api.us-east-1.amazonaws.com" },
-    { "key": "clientes_url", "value": "https://3l552xeuv9.execute-api.us-east-1.amazonaws.com" },
-    { "key": "correo_admin", "value": "admin.seguros.817370@demo.test" },
-    { "key": "correo_vendedor", "value": "marta.vend.817370@demo.test" },
-    { "key": "correo_gerente", "value": "luis.ger.817370@demo.test" },
-    { "key": "contrasena", "value": "ClaveSegura123" },
-    { "key": "token_admin", "value": "" },
-    { "key": "token_vendedor", "value": "" },
-    { "key": "token_gerente", "value": "" },
-    { "key": "usuario_vendedor_id", "value": "usr_90a65783" },
-    { "key": "usuario_gerente_id", "value": "usr_14e92a97" },
-    { "key": "cliente_id", "value": "" }
+    {
+      "key": "usuarios_url",
+      "value": "https://6ge9waha1h.execute-api.us-east-1.amazonaws.com"
+    },
+    {
+      "key": "clientes_url",
+      "value": "https://3l552xeuv9.execute-api.us-east-1.amazonaws.com"
+    },
+    {
+      "key": "correo_admin",
+      "value": "admin.seguros.817370@demo.test"
+    },
+    {
+      "key": "correo_vendedor",
+      "value": "marta.vend.817370@demo.test"
+    },
+    {
+      "key": "correo_gerente",
+      "value": "luis.ger.817370@demo.test"
+    },
+    {
+      "key": "contrasena",
+      "value": "ClaveSegura123"
+    },
+    {
+      "key": "token_admin",
+      "value": ""
+    },
+    {
+      "key": "token_vendedor",
+      "value": ""
+    },
+    {
+      "key": "token_gerente",
+      "value": ""
+    },
+    {
+      "key": "usuario_vendedor_id",
+      "value": "usr_90a65783"
+    },
+    {
+      "key": "usuario_gerente_id",
+      "value": "usr_14e92a97"
+    },
+    {
+      "key": "cliente_id",
+      "value": ""
+    },
+    {
+      "key": "oportunidades_url",
+      "value": ""
+    },
+    {
+      "key": "oportunidad_id",
+      "value": ""
+    },
+    {
+      "key": "notificaciones_url",
+      "value": ""
+    },
+    {
+      "key": "notificacion_id",
+      "value": ""
+    }
   ],
   "item": [
     {
@@ -25,7 +77,12 @@
           "name": "Registrar tenant (público)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"nombre_empresa\": \"Seguros Andinos Demo\",\n  \"rubro\": \"seguros\",\n  \"nombre_admin\": \"Ana Admin\",\n  \"correo\": \"{{correo_admin}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}"
@@ -35,19 +92,26 @@
         },
         {
           "name": "Login admin",
-          "event": [{
-            "listen": "test",
-            "script": {
-              "type": "text/javascript",
-              "exec": [
-                "const d = pm.response.json();",
-                "pm.collectionVariables.set('token_admin', d.token);"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.collectionVariables.set('token_admin', d.token);"
+                ]
+              }
             }
-          }],
+          ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"correo\": \"{{correo_admin}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}"
@@ -57,21 +121,29 @@
         },
         {
           "name": "Crear vendedor (admin)",
-          "event": [{
-            "listen": "test",
-            "script": {
-              "type": "text/javascript",
-              "exec": [
-                "const d = pm.response.json();",
-                "if (d.usuario_id) pm.collectionVariables.set('usuario_vendedor_id', d.usuario_id);"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "if (d.usuario_id) pm.collectionVariables.set('usuario_vendedor_id', d.usuario_id);"
+                ]
+              }
             }
-          }],
+          ],
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token_admin}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_admin}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -82,21 +154,29 @@
         },
         {
           "name": "Crear gerente (admin)",
-          "event": [{
-            "listen": "test",
-            "script": {
-              "type": "text/javascript",
-              "exec": [
-                "const d = pm.response.json();",
-                "if (d.usuario_id) pm.collectionVariables.set('usuario_gerente_id', d.usuario_id);"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "if (d.usuario_id) pm.collectionVariables.set('usuario_gerente_id', d.usuario_id);"
+                ]
+              }
             }
-          }],
+          ],
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token_admin}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_admin}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -109,25 +189,37 @@
           "name": "Listar usuarios (admin)",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token_admin}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_admin}}"
+              }
+            ],
             "url": "{{usuarios_url}}/usuarios"
           }
         },
         {
           "name": "Login vendedor",
-          "event": [{
-            "listen": "test",
-            "script": {
-              "type": "text/javascript",
-              "exec": [
-                "const d = pm.response.json();",
-                "pm.collectionVariables.set('token_vendedor', d.token);"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.collectionVariables.set('token_vendedor', d.token);"
+                ]
+              }
             }
-          }],
+          ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"correo\": \"{{correo_vendedor}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}"
@@ -137,19 +229,26 @@
         },
         {
           "name": "Login gerente",
-          "event": [{
-            "listen": "test",
-            "script": {
-              "type": "text/javascript",
-              "exec": [
-                "const d = pm.response.json();",
-                "pm.collectionVariables.set('token_gerente', d.token);"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "pm.collectionVariables.set('token_gerente', d.token);"
+                ]
+              }
             }
-          }],
+          ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"correo\": \"{{correo_gerente}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}"
@@ -162,8 +261,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token_vendedor}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -179,21 +284,29 @@
       "item": [
         {
           "name": "Crear cliente (vendedor)",
-          "event": [{
-            "listen": "test",
-            "script": {
-              "type": "text/javascript",
-              "exec": [
-                "const d = pm.response.json();",
-                "if (d.cliente_id) pm.collectionVariables.set('cliente_id', d.cliente_id);"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "if (d.cliente_id) pm.collectionVariables.set('cliente_id', d.cliente_id);"
+                ]
+              }
             }
-          }],
+          ],
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token_vendedor}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -206,7 +319,12 @@
           "name": "Listar clientes",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token_vendedor}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
             "url": "{{clientes_url}}/clientes"
           }
         },
@@ -214,7 +332,12 @@
           "name": "Obtener cliente",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token_vendedor}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
             "url": "{{clientes_url}}/clientes/{{cliente_id}}"
           }
         },
@@ -223,8 +346,14 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token_vendedor}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -238,8 +367,14 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token_vendedor}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -253,8 +388,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token_vendedor}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -267,7 +408,12 @@
           "name": "Listar contactos",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token_vendedor}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
             "url": "{{clientes_url}}/clientes/{{cliente_id}}/contactos"
           }
         },
@@ -275,7 +421,12 @@
           "name": "Eliminar cliente (vendedor, debe 403)",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token_vendedor}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
             "url": "{{clientes_url}}/clientes/{{cliente_id}}"
           }
         },
@@ -284,8 +435,14 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token_gerente}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_gerente}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -305,7 +462,12 @@
           "name": "Token inválido (debe 403)",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer token.falso.aqui" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer token.falso.aqui"
+              }
+            ],
             "url": "{{clientes_url}}/clientes"
           }
         },
@@ -313,9 +475,713 @@
           "name": "Eliminar cliente (gerente, 200)",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token_gerente}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_gerente}}"
+              }
+            ],
             "url": "{{clientes_url}}/clientes/{{cliente_id}}"
           }
+        }
+      ]
+    },
+    {
+      "name": "3. Oportunidades",
+      "item": [
+        {
+          "name": "Crear oportunidad (vendedor)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente_id\": \"cli_000001\",\n  \"cliente_nombre\": \"Constructora Andes\",\n  \"titulo\": \"Seguro de flota\",\n  \"monto_estimado\": 80000,\n  \"moneda\": \"PEN\",\n  \"fecha_cierre_estimada\": \"2026-12-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "if (d.oportunidad_id) pm.collectionVariables.set('oportunidad_id', d.oportunidad_id);",
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar oportunidades",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar oportunidades (etapa=nueva)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades?etapa=nueva"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener oportunidad",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar oportunidad (vendedor)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monto_estimado\": 95000,\n  \"probabilidad\": 30\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vendedor reasigna responsable (debe 403)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"responsable_id\": \"{{usuario_gerente_id}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));",
+                  "pm.test('codigo prohibido', () => pm.expect(pm.response.json().codigo).to.eql('prohibido'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar etapa a calificada (200)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}/etapa",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"etapa\": \"calificada\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver historial",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}/historial"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retroceder a nueva (debe 400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}/etapa",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"etapa\": \"nueva\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));",
+                  "pm.test('codigo transicion_invalida', () => pm.expect(pm.response.json().codigo).to.eql('transicion_invalida'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pasar a perdida sin motivo (debe 400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}/etapa",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"etapa\": \"perdida\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));",
+                  "pm.test('codigo motivo_requerido', () => pm.expect(pm.response.json().codigo).to.eql('motivo_requerido'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pasar a ganada (gerente, 200)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_gerente}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}/etapa",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"etapa\": \"ganada\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar oportunidad cerrada (debe 409)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Intento de edicion\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 409', () => pm.response.to.have.status(409));",
+                  "pm.test('codigo oportunidad_cerrada', () => pm.expect(pm.response.json().codigo).to.eql('oportunidad_cerrada'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar oportunidad (vendedor, debe 403)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));",
+                  "pm.test('codigo prohibido', () => pm.expect(pm.response.json().codigo).to.eql('prohibido'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar oportunidad (gerente, 200)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_gerente}}"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sin token (debe 401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{oportunidades_url}}/oportunidades"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token inválido (debe 403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer token.falso.aqui"
+              }
+            ],
+            "url": "{{oportunidades_url}}/oportunidades"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Notificaciones",
+      "item": [
+        {
+          "name": "Listar notificaciones (vendedor)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{notificaciones_url}}/notificaciones"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "if (d.notificaciones && d.notificaciones.length) pm.collectionVariables.set('notificacion_id', d.notificaciones[0].notificacion_id);",
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar solo no leídas (vendedor)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{notificaciones_url}}/notificaciones?solo_no_leidas=true"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar con límite 1 (paginación)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{notificaciones_url}}/notificaciones?limite=1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marcar como leída (vendedor)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{notificaciones_url}}/notificaciones/{{notificacion_id}}/leer"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marcar otra vez (idempotente, 200)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{notificaciones_url}}/notificaciones/{{notificacion_id}}/leer"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marcar aviso ajeno (admin, debe 404)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_admin}}"
+              }
+            ],
+            "url": "{{notificaciones_url}}/notificaciones/{{notificacion_id}}/leer"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 404', () => pm.response.to.have.status(404));",
+                  "pm.test('codigo no_encontrado', () => pm.expect(pm.response.json().codigo).to.eql('no_encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar notificaciones (gerente)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_gerente}}"
+              }
+            ],
+            "url": "{{notificaciones_url}}/notificaciones"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar notificaciones (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_admin}}"
+              }
+            ],
+            "url": "{{notificaciones_url}}/notificaciones"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Límite inválido (debe 400)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_vendedor}}"
+              }
+            ],
+            "url": "{{notificaciones_url}}/notificaciones?limite=abc"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));",
+                  "pm.test('codigo datos_invalidos', () => pm.expect(pm.response.json().codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sin token (debe 401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{notificaciones_url}}/notificaciones"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
         }
       ]
     }
