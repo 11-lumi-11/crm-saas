@@ -1,5 +1,9 @@
 import json
 import hashlib
+import math
+import re
+from datetime import datetime
+from string import Formatter
 
 from botocore.exceptions import ClientError
 
@@ -53,12 +57,6 @@ PLANTILLAS = {
 }
 
 
-class DatosConFaltantes(dict):
-    # Si al evento le falta un campo, el mensaje muestra "-" en lugar de fallar
-    def __missing__(self, clave):
-        return '-'
-
-
 def leer_evento(registro):
     # Sin RawMessageDelivery: el body de SQS es el sobre de SNS y el evento va en "Message"
     sobre = json.loads(registro['body'])
@@ -68,16 +66,47 @@ def leer_evento(registro):
 
 
 def armar_notificaciones(evento):
+    if not isinstance(evento, dict):
+        raise ValueError('El evento debe ser un objeto')
     tipo = evento.get('tipo')
     tenant_id = evento.get('tenant_id')
     evento_id = evento.get('evento_id')
-    if tipo not in PLANTILLAS or not tenant_id or not evento_id:
-        print(f'Evento ignorado: tipo={tipo} evento_id={evento_id}')
-        return []
+    if not isinstance(tipo, str) or tipo not in PLANTILLAS:
+        raise ValueError('Tipo de evento desconocido')
+    if not isinstance(tenant_id, str) or not tenant_id.strip():
+        raise ValueError('Falta tenant_id')
+    if not isinstance(evento_id, str) or not evento_id.strip():
+        raise ValueError('Falta evento_id')
+    fecha_evento = evento.get('fecha')
+    try:
+        if not isinstance(fecha_evento, str) or 'T' not in fecha_evento:
+            raise ValueError()
+        fecha_parseada = datetime.fromisoformat(fecha_evento.replace('Z', '+00:00'))
+        if fecha_parseada.tzinfo is None:
+            raise ValueError()
+    except ValueError:
+        raise ValueError('fecha debe ser ISO 8601 con zona horaria')
 
     titulo, plantilla, destinos = PLANTILLAS[tipo]
-    datos = evento.get('datos') or {}
-    mensaje = plantilla.format_map(DatosConFaltantes(datos))
+    datos = evento.get('datos')
+    if not isinstance(datos, dict):
+        raise ValueError('datos debe ser un objeto')
+    campos = {campo for _, campo, _, _ in Formatter().parse(plantilla) if campo}
+    for campo in campos:
+        valor = datos.get(campo)
+        if campo in ('total', 'monto_estimado'):
+            valido = (not isinstance(valor, bool) and isinstance(valor, (int, float))
+                      and (not isinstance(valor, float) or math.isfinite(valor)))
+        else:
+            valido = isinstance(valor, str) and bool(valor.strip())
+        if not valido:
+            raise ValueError(f'Campo obligatorio inválido: {campo}')
+    for destino in destinos:
+        if not destino.startswith('rol:'):
+            usuario_id = datos.get(destino)
+            if not isinstance(usuario_id, str) or not re.fullmatch(r'usr_[A-Za-z0-9]+', usuario_id):
+                raise ValueError(f'Destinatario obligatorio inválido: {destino}')
+    mensaje = plantilla.format_map(datos)
     fecha = ahora()
 
     avisos = []
@@ -90,9 +119,6 @@ def armar_notificaciones(evento):
             item['destino'] = destino_rol(tenant_id, rol)
         else:
             usuario_id = datos.get(destino)
-            if not isinstance(usuario_id, str) or not usuario_id.startswith('usr_'):
-                print(f"Evento {evento_id} sin '{destino}' válido: se omite ese destinatario")
-                continue
             item['usuario_destino_id'] = usuario_id
             item['destino'] = destino_usuario(tenant_id, usuario_id)
 

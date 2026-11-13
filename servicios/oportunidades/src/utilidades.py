@@ -82,7 +82,7 @@ def leer_oportunidad(tenant_id, oportunidad_id):
 
 # ---------- Cambio de etapa (compartido por CambiarEtapa y el consumidor SQS) ----------
 
-def cambiar_etapa(tenant_id, oportunidad_id, etapa_nueva, motivo_perdida, usuario_id):
+def cambiar_etapa(tenant_id, oportunidad_id, etapa_nueva, motivo_perdida, usuario_id, operaciones_adicionales=()):
     if not isinstance(etapa_nueva, str) or etapa_nueva not in ETAPAS:
         raise ErrorNegocio(400, 'etapa_invalida', 'Etapa no permitida')
 
@@ -165,7 +165,8 @@ def cambiar_etapa(tenant_id, oportunidad_id, etapa_nueva, motivo_perdida, usuari
                     'Item': {k: serializador.serialize(v) for k, v in historial.items()}
                 }
             },
-            evento_pendiente(tipo, tenant_id, datos_evento)
+            evento_pendiente(tipo, tenant_id, datos_evento),
+            *operaciones_adicionales,
         ])
     except dynamodb_cliente.exceptions.TransactionCanceledException as e:
         razones = e.response.get('CancellationReasons', [])

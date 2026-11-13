@@ -16,12 +16,14 @@ def lambda_handler(event, context):
             Key={'tenant_id': tenant_id, 'cotizacion_id': cotizacion_id},
             UpdateExpression='SET eliminado = :si, fecha_eliminacion = :fecha, fecha_actualizacion = :fecha',
             ConditionExpression='attribute_exists(cotizacion_id) AND attribute_not_exists(fecha_eliminacion) '
-                                'AND #estado <> :aceptada',
+                                'AND #estado <> :aceptada AND #estado <> :pendiente',
             ExpressionAttributeNames={'#estado': 'estado'},
-            ExpressionAttributeValues={':si': True, ':fecha': ahora(), ':aceptada': 'aceptada'})
+            ExpressionAttributeValues={':si': True, ':fecha': ahora(), ':aceptada': 'aceptada', ':pendiente': 'aceptacion_pendiente'})
     except ClientError as error:
         if error.response['Error']['Code'] == 'ConditionalCheckFailedException':
-            leer_cotizacion(tenant_id, cotizacion_id)  # 404 si no existe o ya está archivada
+            actual = leer_cotizacion(tenant_id, cotizacion_id)  # 404 si no existe o ya está archivada
+            if actual['estado'] == 'aceptacion_pendiente':
+                raise ErrorNegocio(409, 'aceptacion_pendiente', 'Espere la confirmación antes de archivar la cotización')
             raise ErrorNegocio(409, 'cotizacion_aceptada', 'Una cotización aceptada no se puede eliminar')
         raise
     return respuesta(200, {'mensaje': 'Cotización archivada correctamente', 'cotizacion_id': cotizacion_id})

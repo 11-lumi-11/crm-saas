@@ -24,21 +24,24 @@ La URL que imprime el deploy es la de `VITE_PRODUCTOS_URL` (frontend) y `product
 
 ## Estados de una cotización
 
-`borrador` → `enviada` → `aceptada` o `rechazada`. Solo se envía un borrador y solo se acepta o rechaza una enviada. Una cotización vencida (`fecha_vencimiento` pasada) no se envía ni se acepta (409 `cotizacion_vencida`). Cada transición actualiza la cotización y guarda el evento en el outbox en una sola transacción, con la condición de que el estado siga siendo el leído (409 `conflicto_estado` si otro cambio se adelantó).
+`borrador` → `enviada` → `aceptacion_pendiente` → `aceptada`; también se puede rechazar una cotización enviada. Una cotización vencida no se envía ni se solicita su aceptación (409 `cotizacion_vencida`).
+
+`PUT /cotizaciones/{id}/aceptar` responde 202 y deja la cotización en `aceptacion_pendiente`. El usuario debe consultar `GET /cotizaciones/{id}` hasta conocer el resultado: si Oportunidades confirma el cierre, queda `aceptada`; si la oportunidad está perdida, ganada, archivada, no existe o pertenece a otro cliente, vuelve a `enviada` y el campo `resultado_aceptacion` explica el motivo. Mientras está pendiente no se puede archivar ni rechazar. Los mensajes circulan mediante outboxes y colas, por lo que pueden tardar varios minutos; una falla persistente requiere revisar las DLQ.
 
 ## Eventos publicados
 
 | Evento | Cuándo | `datos` |
 | --- | --- | --- |
 | `cotizacion.enviada` | borrador → enviada | `cotizacion_id`, `oportunidad_id`, `cliente_id`, `total`, `creada_por` |
+| `cotizacion.aceptacion_solicitada` | enviada → aceptación pendiente | `cotizacion_id`, `oportunidad_id`, `cliente_id`, `solicitud_id` |
 | `cotizacion.aceptada` | enviada → aceptada | `cotizacion_id`, `oportunidad_id`, `cliente_id`, `total` |
 | `cotizacion.rechazada` | enviada → rechazada | `cotizacion_id`, `oportunidad_id`, `cliente_id`, `creada_por` |
 
-Se publican con el atributo SNS `tipo` (lo hace el publicador de la capa común). No escucha eventos.
+Se publican con el atributo SNS `tipo` (lo hace el publicador de la capa común). El servicio escucha `oportunidad.aceptacion_confirmada` y `oportunidad.aceptacion_rechazada` para terminar la solicitud.
 
 ## Probar la cadena con Oportunidades
 
 1. Crear un producto (token de gerente o admin).
 2. Crear una oportunidad en Oportunidades y copiar su `oportunidad_id`.
 3. Crear la cotización con ese `oportunidad_id`, enviarla y aceptarla.
-4. Esperar hasta un minuto (o invocar `publicarEventos` a mano) y consultar la oportunidad: debe estar `ganada`, con historial de usuario `sistema`.
+4. Consultar la cotización hasta que termine de estar pendiente y consultar la oportunidad: debe estar `ganada`, con historial de usuario `sistema`. El recorrido usa los publicadores de ambos servicios; no se garantiza que termine en un minuto.

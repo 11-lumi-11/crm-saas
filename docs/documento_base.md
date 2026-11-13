@@ -2,7 +2,7 @@
 
 *CS2032 Cloud Computing · Proyecto Final · Ciclo 2026-2*
 
-> **Guía vigente del repositorio · actualización: 2026-11-11.** Este documento reúne el contrato funcional, el estado de implementación y la evidencia de validación. Una funcionalidad descrita no implica que esté implementada o probada en AWS. Los cambios de contrato se registran aquí junto con su implementación; los acuerdos pendientes se señalan como **[DECIDIR]**.
+> **Guía vigente del repositorio · actualización: 2026-11-12.** Este documento reúne el contrato funcional, el estado de implementación y la evidencia de validación. Una funcionalidad descrita no implica que esté implementada o probada en AWS. Los cambios de contrato se registran aquí junto con su implementación; los acuerdos pendientes se señalan como **[DECIDIR]**.
 
 ## 0. Estado actual y cómo usar esta guía
 
@@ -12,7 +12,7 @@
 - **Implementado:** existe código y configuración en el repositorio. Su validación local se indica por separado.
 - **Verificado en AWS:** hay evidencia de ejecución del caso con fecha, cuenta o entorno, stage y resultado. Un archivo de Serverless o una colección Postman no constituyen esa evidencia.
 
-La revisión del 2026-11-11 y sus pruebas son locales. **No se ha acreditado aquí ningún despliegue ni flujo completo en AWS.** Si el grupo ya realizó pruebas, debe incorporar sus evidencias en la sección 14.
+La revisión del 2026-11-11 y sus pruebas fueron locales. El 2026-11-12 Serverless informó el despliegue exitoso de las siete pilas en AWS; **los flujos funcionales aún no se han acreditado**. Ver sección 14.
 
 ### Inventario del repositorio
 
@@ -23,10 +23,10 @@ La revisión del 2026-11-11 y sus pruebas son locales. **No se ha acreditado aqu
 | Clientes y contactos | Sí | CRUD con borrado lógico; contacto principal atómico; filtro por responsable; outbox | Pruebas de permisos, validaciones, archivo y conflictos | Pendiente de evidencia |
 | Oportunidades | Sí | Pipeline, historial, borrado lógico, outbox y consumidor SQS | Importaciones, transacción de cierre y reintentos del consumidor | Pendiente de evidencia |
 | Notificaciones | Sí | Consumidor SQS con DLQ, deduplicación por evento y destino, lectura individual por usuario, `GET /notificaciones` y `PUT /notificaciones/{notificacion_id}/leer` | Pruebas locales con boto3 simulado: sobre SNS, duplicados, aislamiento por tenant, lectura por rol, paginación y errores | Pendiente de evidencia | 
-| Productos y Cotizaciones | Sí | Catálogo con permisos de gestión, cotizaciones con copia de precios y total decimal, transiciones condicionales borrador → enviada → aceptada/rechazada, vencimiento, borrado lógico y outbox | Pruebas locales con moto (DynamoDB y SNS/SQS simulados): permisos, validaciones, aislamiento por tenant, transiciones, outbox, publicador con atributo `tipo` y consumo de `cotizacion.aceptada` por Oportunidades | Pendiente de evidencia |
-| Actividades | Contrato inicial | No | No aplica | Pendiente |
+| Productos y Cotizaciones | Sí | Catálogo, cotizaciones, aceptación asíncrona coordinada con Oportunidades y outbox | Pruebas nuevas con dobles para el protocolo; integración AWS pendiente | Pendiente de evidencia |
+| Actividades | Sí | CRUD, consumidor SQS, outbox y barrera para oportunidades perdidas | README refiere una suite que no está disponible en el repositorio; pendiente de reproducir | Pendiente de evidencia |
 | Generación/carga de datos ficticios | Requisitos definidos | `generar_datos.py` y `cargar_datos.py` vacíos; sí existe migración de integridad | Migración cubierta por pruebas locales | Pendiente |
-| Frontend Amplify | Visión funcional | No hay código en este repositorio | No aplica | Pendiente |
+| Frontend Amplify | Visión funcional | Frontend oficial en `crm-frontend-main`; flujos integrados y pendientes en su registro de estado | Flujos principales comprobados por el usuario desde localhost | Publicado en `dev`; HTTP 200; flujos desde la URL pendiente de prueba |
 | Pruebas y herramientas | Colección Postman y validación local | Suite local ejecutada y omitida del remoto por ser material de trabajo | Ver [validación local](validacion_local.md) | Postman pendiente de ejecución documentada |
 
 ### Correcciones realizadas el 2026-11-11
@@ -52,9 +52,9 @@ La revisión del 2026-11-11 y sus pruebas son locales. **No se ha acreditado aqu
 ### Próximos pasos
 
 1. Desplegar y migrar estas correcciones en un entorno de prueba; completar la matriz de la sección 14.
-2. Implementar **Notificaciones**, definiendo primero deduplicación por evento/destino y lectura individual de avisos por rol.
-3. Implementar **Productos y Cotizaciones**, para conectar `cotizacion.aceptada` con Oportunidades.
-4. Implementar **Actividades**, y avanzar en paralelo con frontend, datos coherentes, informe y demo.
+2. Verificar los seis servicios y sus eventos en AWS, incluida la aceptación asíncrona y las DLQ.
+3. Completar pruebas reproducibles, frontend, datos coherentes, informe y demo.
+4. Resolver los límites de volumen y operación documentados en la sección 14.
 
 ### Regla de mantenimiento
 
@@ -401,10 +401,13 @@ Los montos se guardan como número decimal en DynamoDB y se devuelven como núme
 - `oportunidad.etapa_cambiada` en un cambio entre etapas **abiertas**.
 - `oportunidad.ganada` al cerrar como ganada (manualmente o por `cotizacion.aceptada`).
 - `oportunidad.perdida` al cerrar como perdida.
+- `oportunidad.aceptacion_confirmada` o `oportunidad.aceptacion_rechazada` como resultado de una solicitud de Cotizaciones.
 
 **Regla de cierre:** al cerrar una oportunidad se publica **solo** `ganada` o `perdida`, nunca además `etapa_cambiada`, para que Actividades no reciba dos eventos del mismo cambio. Los montos viajan como número, no como texto.
 
-**Eventos que escucha:** `cotizacion.aceptada`.
+**Eventos que escucha:** `cotizacion.aceptacion_solicitada` para el flujo nuevo y `cotizacion.aceptada` mediante el consumidor anterior, conservado por compatibilidad. No publicar este último manualmente para probar el flujo nuevo: podría cerrar una oportunidad sin una solicitud válida.
+
+**Aceptación coordinada:** una solicitud válida para una oportunidad abierta del mismo tenant y cliente cierra la oportunidad y guarda su decisión y eventos en una transacción. Si está perdida, ganada, archivada, no existe o el cliente no coincide, guarda una decisión de rechazo. La decisión se publica por outbox a Cotizaciones; `solicitud_id` evita procesarla dos veces. Las condiciones de cierre hacen que una aceptación y una pérdida simultáneas no puedan cerrar ambas. El resultado asíncrono y las carreras necesitan prueba real en AWS.
 
 **Cómo consume `cotizacion.aceptada`:**
 
@@ -416,11 +419,11 @@ Los montos se guardan como número decimal en DynamoDB y se devuelven como núme
 
 Esta reacción produce únicamente `oportunidad.ganada`, mediante el outbox; no produce además `oportunidad.etapa_cambiada`.
 
-**\[VERIFICAR\]** Es el primer servicio con consumidor SQS. Al desplegar, comprobar primero que la política de la cola y la suscripción con su filtro dejan pasar el mensaje, antes de probar el resto. Mientras no exista Cotizaciones, se puede probar publicando a mano en el topic un evento `cotizacion.aceptada` con el atributo `tipo` y un `oportunidad_id` real.
+**\[VERIFICAR\]** Comprobar ambas suscripciones, el filtro por `tipo`, los reintentos parciales y las DLQ en AWS.
 
 ### 7.4 Actividades
 
-**Estado:** diseño inicial; no implementado ni verificado en AWS. Las rutas y eventos siguientes son el contrato previsto.
+**Estado:** implementado; verificación AWS pendiente. El README refiere pruebas que no están disponibles en el repositorio para repetirlas.
 
 **Qué hace:** gestiona el seguimiento comercial: llamadas, reuniones, correos y tareas, con fecha y responsable. Algunas se crean a mano y otras automáticamente por eventos.
 
@@ -445,13 +448,15 @@ Esta reacción produce únicamente `oportunidad.ganada`, mediante el outbox; no 
 
 **Eventos:** publica `actividad.completada`. Escucha `oportunidad.etapa_cambiada`, `oportunidad.ganada`, `oportunidad.perdida`, `cotizacion.enviada`.
 
+El vendedor solo puede asignarse una actividad nueva a sí mismo y no puede reasignarla; gerente y admin sí pueden asignar. Se editan solo pendientes; completar es idempotente y las canceladas o completadas no se reabren. El listado admite filtros y cursor. El consumidor deduplica eventos y conserva una barrera ante una oportunidad perdida. La cancelación recorre actividades del tenant en páginas y puede quedar incompleta tras agotar los intentos; ver sección 14 y [README](../servicios/actividades/README.md).
+
 ### 7.5 Productos y Cotizaciones
 
 **Estado:** implementado; validado localmente; pendiente de evidencia en AWS. Carpeta `servicios/productos_cotizaciones`, stack `crm-productos-cotizaciones`. Productos y cotizaciones comparten una sola HTTP API (`VITE_PRODUCTOS_URL` en el frontend, `productos_url` en Postman).
 
 **Qué hace:** mantiene el catálogo de lo que vende el tenant y permite armar cotizaciones para una oportunidad.
 
-**Qué NO hace:** no cambia el estado de la oportunidad directamente; solo avisa con eventos. No consulta Oportunidades ni Clientes, así que **no valida que `oportunidad_id` o `cliente_id` existan** (solo su prefijo `opo_` / `cli_`). Sí lee su propia tabla de productos al cotizar.
+**Qué NO hace:** no consulta directamente las bases de Oportunidades ni Clientes. Al crear solo valida los prefijos `opo_` / `cli_`; al solicitar la aceptación, Oportunidades verifica que exista una oportunidad abierta del tenant y que coincida su `cliente_id`. Esto no comprueba la existencia del cliente en Clientes. Sí lee su propia tabla de productos al cotizar.
 
 **Tabla `t_productos`** (clave: `tenant_id` + `producto_id`)
 
@@ -471,7 +476,9 @@ Los productos no se borran: se desactivan con `PUT /productos/{producto_id}` y `
 | --- | --- |
 | `tenant_id`, `cotizacion_id` | Identificación (`cot_` + UUID hexadecimal) |
 | `oportunidad_id`, `cliente_id` | A qué venta y cliente corresponde |
-| `estado` | `borrador`, `enviada`, `aceptada`, `rechazada` |
+| `estado` | `borrador`, `enviada`, `aceptacion_pendiente`, `aceptada`, `rechazada` |
+| `solicitud_aceptacion_id`, `resultado_solicitud_id` | Identificadores de solicitud y respuesta procesada |
+| `resultado_aceptacion`, `fecha_resultado_aceptacion` | Motivo si la solicitud fue denegada y fecha del resultado |
 | `items` | Lista incrustada en la misma cotización; cada ítem lleva `producto_id`, `nombre_producto`, `cantidad`, `precio_unitario`, `subtotal` |
 | `total`, `moneda` | Suma de subtotales (2 decimales) y moneda de la cotización |
 | `fecha_vencimiento` | Hasta cuándo es válida (ISO 8601 UTC; por defecto 15 días después de crearla) |
@@ -486,7 +493,7 @@ Los productos no se borran: se desactivan con `PUT /productos/{producto_id}` y `
 
 Los ítems guardan una copia del nombre y el precio al momento de cotizar, para que un cambio posterior en el catálogo no altere cotizaciones ya emitidas. Una cotización admite de 1 a 50 ítems; `cantidad` es entero de 1 a 100,000; no se repite un `producto_id`. Todos los productos deben estar activos y tener la misma moneda que la cotización.
 
-**Reglas de estado:** `borrador` → `enviada` → `aceptada` o `rechazada`. Solo se envía un borrador; solo se acepta o rechaza una enviada (409 `estado_invalido_cotizacion`). Una cotización vencida no se envía ni se acepta (409 `cotizacion_vencida`); sí se puede rechazar. Cada transición actualiza la cotización y guarda su evento en el outbox en una sola transacción, con la condición de que el estado no haya cambiado (409 `conflicto_estado`). Rechazar **no** pierde la oportunidad (Flujo 5).
+**Reglas de estado:** `borrador` → `enviada` → `aceptacion_pendiente` → `aceptada`. La cotización enviada también se puede rechazar. Solicitar aceptación responde 202; mientras está pendiente no se puede archivar ni rechazar. Si Oportunidades rechaza la solicitud, vuelve a `enviada` y `resultado_aceptacion` explica el motivo. Una cotización vencida no se envía ni se solicita su aceptación; sí se puede rechazar. El dato y el evento correspondiente se guardan transaccionalmente. Rechazar la cotización **no** pierde la oportunidad.
 
 **Permisos:** todos los roles ven el catálogo y ven, crean, envían, aceptan y rechazan cotizaciones. Solo gerente y admin crean y editan productos, y eliminan (archivan) cotizaciones. Una cotización `aceptada` no se puede eliminar (409 `cotizacion_aceptada`).
 
@@ -502,15 +509,15 @@ Los ítems guardan una copia del nombre y el precio al momento de cotizar, para 
 | `GET /cotizaciones` | `ListarCotizaciones` | Paginación; **un solo** filtro: `oportunidad_id` o `estado` (400 `filtros_incompatibles`). Excluye archivadas |
 | `GET /cotizaciones/{cotizacion_id}` | `ObtenerCotizacion` | `{"cotizacion": {...}}` o 404 |
 | `PUT /cotizaciones/{cotizacion_id}/enviar` | `EnviarCotizacion` | borrador → enviada; publica `cotizacion.enviada` |
-| `PUT /cotizaciones/{cotizacion_id}/aceptar` | `AceptarCotizacion` | enviada → aceptada; publica `cotizacion.aceptada` |
+| `PUT /cotizaciones/{cotizacion_id}/aceptar` | `AceptarCotizacion` | 202; enviada → aceptación pendiente; consultar `GET` para conocer confirmación o motivo de rechazo |
 | `PUT /cotizaciones/{cotizacion_id}/rechazar` | `RechazarCotizacion` | enviada → rechazada; body opcional `motivo_rechazo`; publica `cotizacion.rechazada` |
 | `DELETE /cotizaciones/{cotizacion_id}` | `EliminarCotizacion` | Gerente/admin. Borrado lógico; no publica evento. *(Ruta agregada; ver sección 12)* |
 
 **Códigos de error propios:** `datos_incompletos`, `datos_invalidos`, `estado_invalido`, `producto_no_disponible`, `moneda_incompatible`, `filtros_incompatibles`, `paginacion_invalida` (400); `prohibido` (403); `no_encontrado` (404); `estado_invalido_cotizacion`, `cotizacion_vencida`, `conflicto_estado`, `cotizacion_aceptada` (409). Además los comunes `json_invalido` y `no_autorizado`.
 
-**Eventos:** publica `cotizacion.enviada`, `cotizacion.aceptada`, `cotizacion.rechazada` mediante el outbox `t_eventos_productos_cotizaciones` y el publicador de la capa común, que incluye el atributo SNS `tipo`. `total` viaja como número. No escucha ninguno. El catálogo no publica eventos.
+**Eventos:** publica `cotizacion.enviada`, `cotizacion.aceptacion_solicitada`, `cotizacion.aceptada` y `cotizacion.rechazada` por outbox. Escucha `oportunidad.aceptacion_confirmada` y `oportunidad.aceptacion_rechazada`. El catálogo no publica eventos.
 
-**Límite conocido:** el servicio no impide que dos cotizaciones de la misma oportunidad queden `aceptada`; la segunda no tiene efecto en Oportunidades porque la oportunidad ya está cerrada (su consumidor la omite).
+**Límite conocido:** la solicitud puede permanecer pendiente si falla la mensajería o una respuesta llega a la DLQ; revisar colas y outboxes. El flujo nuevo rechaza la segunda aceptación cuando la oportunidad ya está ganada; los datos antiguos pueden contener inconsistencias previas.
 
 ### 7.6 Notificaciones
 
@@ -537,7 +544,7 @@ GSI `destino-index`: `destino` + `orden`, proyección completa.
 
 **Deduplicación:** el `notificacion_id` es determinista y se escribe con `attribute_not_exists`. Una reentrega del mismo evento no crea otro aviso ni reinicia lecturas.
 
-**Destinatarios por evento:** `usuario.creado` → `usuario_id`; `cliente.creado`, `oportunidad.creada`, `oportunidad.etapa_cambiada`, `actividad.completada` → `responsable_id`; `oportunidad.ganada`, `oportunidad.perdida` → `responsable_id` y rol `gerente`; `cotizacion.enviada`, `cotizacion.rechazada` → `creada_por`; `cotizacion.aceptada` → rol `gerente`. Si falta el usuario en `datos`, se omite ese destinatario.
+**Destinatarios por evento:** `usuario.creado` → `usuario_id`; `cliente.creado`, `oportunidad.creada`, `oportunidad.etapa_cambiada`, `actividad.completada` → `responsable_id`; `oportunidad.ganada`, `oportunidad.perdida` → `responsable_id` y rol `gerente`; `cotizacion.enviada`, `cotizacion.rechazada` → `creada_por`; `cotizacion.aceptada` → rol `gerente`. Si faltan datos necesarios para el mensaje o un destinatario, se rechaza todo el mensaje antes de guardar avisos: SQS reintenta y, tras agotar intentos, lo envía a DLQ. El filtro SNS puede descartar mensajes sin atributo `tipo` antes de que lleguen a la cola.
 
 **Rutas:** `GET /notificaciones` (parámetros `limite` 1-100, `solo_no_leidas=true`, `siguiente`; responde `notificaciones`, `no_leidas_en_pagina` y `siguiente`); `PUT /notificaciones/{notificacion_id}/leer` (idempotente; 404 `no_encontrado` si el aviso no existe o no está dirigido al usuario ni a su rol).
 
@@ -557,7 +564,7 @@ Un servicio **publica** un anuncio en **SNS** (el altavoz). Cada servicio intere
 
 ### Publicación confiable implementada: outbox por servicio
 
-Usuarios, Clientes, Oportunidades y Productos y Cotizaciones tienen cada uno su tabla `t_eventos_<servicio>` (el nombre desplegado lleva el stage). No se comparte la tabla entre servicios.
+Usuarios, Clientes, Oportunidades, Actividades y Productos y Cotizaciones tienen cada uno su tabla `t_eventos_<servicio>` (el nombre desplegado lleva el stage). No se comparte la tabla entre servicios.
 
 | Campo | Uso |
 | --- | --- |
@@ -570,7 +577,7 @@ Usuarios, Clientes, Oportunidades y Productos y Cotizaciones tienen cada uno su 
 
 El GSI `estado-fecha-index` usa `estado` + `fecha_creacion` y proyección completa. El dato de negocio y el evento pendiente se escriben en una transacción de DynamoDB. Cada servicio configura un publicador de la capa común (`crm_comun.eventos.lambda_handler`), ejecutado cada minuto y con concurrencia reservada 1. Consulta los pendientes, publica en SNS con atributo `tipo`, y solo tras éxito marca `enviado`. Un fallo mantiene el evento pendiente sin TTL, para reintentar. La latencia normal incluye el intervalo del publicador y la consistencia eventual del índice; no es publicación inmediata ni un SLA.
 
-**Semántica:** entrega al menos una vez, sin orden global garantizado. Si SNS recibe el mensaje y falla el marcado de enviado, se publicará otra vez con el mismo `evento_id`. Los consumidores futuros deben deduplicar por `tenant_id` + `evento_id` y destino cuando corresponda. Oportunidades evita un segundo cierre porque la etapa final se confirma atómicamente. No hay consumidores de Actividades o Notificaciones implementados todavía. Al desplegar, verificar permisos de EventBridge, concurrencia reservada, transacciones y acceso a las tablas con LabRole. Supervisar eventos pendientes y errores del publicador; alarmas operativas aún pendientes.
+**Semántica:** entrega al menos una vez, sin orden global garantizado. Si SNS recibe el mensaje y falla el marcado de enviado, se publicará otra vez con el mismo `evento_id`. Los consumidores deben manejar duplicados. Actividades y Notificaciones tienen consumidores propios. Al desplegar, verificar permisos de EventBridge, concurrencia reservada, transacciones y acceso a tablas con LabRole. Supervisar eventos pendientes y errores del publicador; alarmas operativas aún pendientes.
 
 ### Formato común de todo evento
 
@@ -595,7 +602,9 @@ Además, todo mensaje se publica con el atributo de mensaje SNS `tipo` (mismo va
 | `oportunidad.ganada` | Oportunidades (al cerrar, manual o por `cotizacion.aceptada`) | Actividades, Notificaciones | Actividades crea tarea de entrega/inicio; Notificaciones avisa al gerente y al responsable | `oportunidad_id`, `cliente_id`, `titulo`, `monto_estimado`, `responsable_id` |
 | `oportunidad.perdida` | Oportunidades (al cerrar) | Actividades, Notificaciones | Actividades cancela tareas pendientes de esa oportunidad; Notificaciones avisa | `oportunidad_id`, `cliente_id`, `motivo_perdida`, `responsable_id` |
 | `cotizacion.enviada` | Cotizaciones | Actividades, Notificaciones | Actividades crea seguimiento a unos días; Notificaciones avisa | `cotizacion_id`, `oportunidad_id`, `cliente_id`, `total`, `creada_por` |
-| `cotizacion.aceptada` | Cotizaciones | Oportunidades, Notificaciones | Oportunidades la marca como `ganada` (y publica `oportunidad.ganada`); Notificaciones avisa | `cotizacion_id`, `oportunidad_id`, `cliente_id`, `total` |
+| `cotizacion.aceptacion_solicitada` | Cotizaciones | Oportunidades | Evalúa la solicitud y cierra la oportunidad si procede | `solicitud_id`, `cotizacion_id`, `oportunidad_id`, `cliente_id` |
+| `oportunidad.aceptacion_confirmada` / `oportunidad.aceptacion_rechazada` | Oportunidades | Cotizaciones | Confirma o rechaza la solicitud pendiente | `solicitud_id`, `cotizacion_id`, `oportunidad_id`, `cliente_id`, `motivo` |
+| `cotizacion.aceptada` | Cotizaciones | Oportunidades (consumidor anterior), Notificaciones | Se emite tras la confirmación; Notificaciones avisa | `cotizacion_id`, `oportunidad_id`, `cliente_id`, `total` |
 | `cotizacion.rechazada` | Cotizaciones | Notificaciones | Avisa al responsable | `cotizacion_id`, `oportunidad_id`, `cliente_id`, `creada_por` |
 | `actividad.completada` | Actividades | Notificaciones | Avisa al responsable de la oportunidad (opcional) | `actividad_id`, `oportunidad_id`, `responsable_id` |
 
@@ -605,12 +614,12 @@ Además, todo mensaje se publica con el atributo de mensaje SNS `tipo` (mismo va
 
 ### Quién escucha a quién (resumen)
 
-- **Notificaciones** escucha todo.
+- **Notificaciones** escucha los diez eventos de negocio configurados, no los tres eventos de coordinación de aceptación.
 - **Actividades** escucha cambios de oportunidades y envíos de cotizaciones.
-- **Oportunidades** escucha solo `cotizacion.aceptada`.
+- **Oportunidades** escucha la solicitud de aceptación y conserva el consumidor anterior de `cotizacion.aceptada`; Cotizaciones escucha la decisión.
 - **Usuarios** y **Clientes** no escuchan nada.
 
-Cuidado con los ciclos: Oportunidades escucha una cotización aceptada y publica `oportunidad.ganada`; esa cadena es intencional y **termina ahí**. Nadie debe publicar un evento como reacción a un evento que lo originó a él mismo.
+La coordinación termina al publicar `cotizacion.aceptada`; el consumidor anterior de Oportunidades omite el cierre ya realizado. El consumidor anterior se mantiene por compatibilidad y debe revisarse antes de retirarlo.
 
 ## 9. Flujos de uso
 
@@ -641,8 +650,8 @@ Estos flujos describen el comportamiento objetivo; no son evidencia de implement
 1. El vendedor crea la oportunidad "Seguro de flota" en etapa `nueva` (`oportunidad.creada`).
 2. Avanza la oportunidad por `calificada`, `propuesta` y `en_negociacion` (puede saltarse etapas, pero no retroceder). En cada cambio entre etapas abiertas se publica `oportunidad.etapa_cambiada`, Actividades crea un seguimiento automático y el historial guarda el cambio.
 3. Un integrante de ventas arma una cotización con los productos del catálogo y la envía (`cotizacion.enviada`). Actividades programa un seguimiento y se notifica al equipo.
-4. El cliente acepta. Se marca la cotización como aceptada (`cotizacion.aceptada`).
-5. Oportunidades escucha el evento, marca la oportunidad como `ganada` (el historial registra el cambio con usuario `sistema`) y publica `oportunidad.ganada`. Como es un cierre, no se publica además `oportunidad.etapa_cambiada`.
+4. El cliente acepta. La cotización queda `aceptacion_pendiente` y solicita confirmación.
+5. Oportunidades confirma si está abierta y corresponde al cliente, la marca `ganada` con historial `sistema` y publica su decisión y `oportunidad.ganada`. Cotizaciones recibe la decisión y publica `cotizacion.aceptada`; si la oportunidad está perdida u otra condición impide el cierre, vuelve a `enviada` con el motivo.
 6. Actividades crea la tarea de inicio de servicio y Notificaciones avisa al gerente y al vendedor.
 
 ### Flujo 5: La cotización es rechazada
@@ -702,10 +711,10 @@ Casos que deben comportarse así y que se prueban en la demo:
 
 - Cada integrante tiene su propia cuenta de AWS, así que **cada quien despliega su propia copia** con el mismo código y la misma configuración de Serverless Framework.
 - Cada servicio tiene su propio archivo de configuración de Serverless Framework.
-- Nombres de recursos definidos en `serverless.yml`: servicios `crm-compartido`, `crm-usuarios`, `crm-clientes`, `crm-oportunidades`, `crm-productos-cotizaciones`, `crm-notificaciones`; tablas con prefijo `${sls:stage}-`. Usar el mismo stage al desplegar todos los stacks de una cuenta (por ejemplo `dev`). Región actual `us-east-1`, runtime Python 3.14, Framework 4 y LabRole de AWS Academy.
+- Nombres de recursos definidos en `serverless.yml`: servicios `crm-compartido`, `crm-usuarios`, `crm-clientes`, `crm-oportunidades`, `crm-actividades`, `crm-productos-cotizaciones`, `crm-notificaciones`; tablas con prefijo `${sls:stage}-`. Usar el mismo stage al desplegar todos los stacks de una cuenta (por ejemplo `dev`). Región actual `us-east-1`, runtime Python 3.14, Framework 4 y LabRole de AWS Academy.
 - **Prueba temprana obligatoria:** antes de programar nada serio, todos despliegan un ejemplo mínimo para confirmar que pueden hacerlo en sus cuentas de AWS Academy.
 - Para la demo, un solo integrante despliega todo en su cuenta.
-- **Orden de despliegue:** primero `compartido` (authorizer, capas y topic SNS), luego Usuarios, Clientes, Oportunidades, Productos y Cotizaciones y Notificaciones. Cada servicio lee los outputs del compartido. Tras cambiar una capa, volver a desplegar los servicios para usar la versión nueva. En instalación nueva el Authorizer rechaza hasta que existan las tablas y la identidad. Para actualizar datos existentes, pausar escrituras, desplegar y ejecutar la migración antes de reabrir. Ver [validación y despliegue](validacion_local.md).
+- **Orden de despliegue:** `compartido`, Usuarios, Clientes, Oportunidades, Actividades, Productos y Cotizaciones y Notificaciones, todos en el mismo stage; crear eventos de prueba solo después de levantar sus consumidores. Cada servicio lee los outputs del compartido. Tras cambiar una capa, volver a desplegar los servicios dependientes. Para actualizar datos existentes, pausar escrituras y evaluar la migración antes de reabrir. Ver [validación y despliegue](validacion_local.md).
 
 ### Trabajo en paralelo
 
@@ -735,6 +744,9 @@ Cualquier cambio de nombres, campos, rutas o eventos se documenta aquí junto co
 
 | Fecha | Qué cambió | Quién |
 | --- | --- | --- |
+| 2026-11-12 | Frontend publicado en Amplify `dev` mediante stack Serverless `crm-frontend-hosting-dev` y carga manual del build; publicación exitosa y raíz HTTP 200. Las pruebas funcionales desde la URL pública quedan pendientes. | Implementación asistida; responsable de la cuenta |
+| 2026-11-12 | Despliegue de `crm-compartido` y los seis servicios en `dev`, `us-east-1`, con Serverless Framework 4; las pruebas funcionales siguen pendientes. | Implementación asistida; responsable de la cuenta |
+| 2026-11-12 | Aceptación asíncrona de cotizaciones, validación de eventos de Notificaciones y corrección de `functionResponseType` en Oportunidades; revisión estática de los siete archivos Serverless y registro de pendientes. Pruebas simuladas; AWS pendiente. | Implementación asistida; revisión del grupo pendiente |
 | 2026-11-11 | **Productos y Cotizaciones:** implementación del servicio (sección 7.5). Rutas nuevas `GET /productos/{producto_id}` y `DELETE /cotizaciones/{cotizacion_id}` (archivo lógico, solo gerente/admin, no para aceptadas). Campos nuevos en `t_cotizaciones`: `fecha_envio`, `fecha_respuesta`, `respondida_por`, `motivo_rechazo`, `eliminado`, `fecha_eliminacion`. Reglas: vencimiento por defecto 15 días, vencidas no se envían ni aceptan, productos inactivos o de otra moneda no se cotizan, 1 a 50 ítems. GSI `oportunidad_id-index` y `estado-index`. Outbox `t_eventos_productos_cotizaciones`. Carpeta Postman 5. | *(tu nombre)* |
 | 2026-11-11 | **Notificaciones:** tablas `t_notificaciones` (GSI `destino-index`) y `t_lecturas_notificaciones`; deduplicación por `tenant_id` + `evento_id` + destino; lectura individual por usuario; cola + DLQ + suscripción filtrada; rutas GET y PUT; destinatarios por evento (sección 7.6). | Mathias |    
 | 2026-11-11 | Corrección de importaciones; capa común HTTP/claims; PBKDF2 con migración en login; Authorizer con estado/rol vigente y JWT nuevo de 1h; transacciones de alta y candado global de correo; protección de admins también ante cambios simultáneos; validación de responsables y contacto principal atómico; borrado lógico de Clientes/Oportunidades; outbox transaccional con reintentos; GSI de responsable; Framework 4 y configuración compartida sin org personal. Se añadieron migración de integridad y pruebas locales. | Implementación asistida; revisión del grupo pendiente |
@@ -762,15 +774,33 @@ Cualquier cambio de nombres, campos, rutas o eventos se documenta aquí junto co
 
 ### Evidencia local
 
-La validación local cubrió contratos HTTP, hashes, Authorizer, conflictos de registro/edición, protección de admins, contacto principal, borrado lógico, outbox, cierre de oportunidades, reentregas SQS y resolución de handlers/configuración. Usó dobles de prueba de boto3; **no demuestra transacciones reales, permisos, tiempos de ejecución ni integración AWS**. Se complementó con compilación y análisis estático. El código de pruebas y sus dependencias se mantienen fuera del remoto por ser material local; el resultado está descrito en [validacion_local.md](validacion_local.md).
+La revisión del 11-nov se describe en [validacion_local.md](validacion_local.md); su suite privada no está disponible en el repositorio. El 12-nov se añadieron pruebas locales reproducibles en `tests/` para la coordinación de aceptación y los eventos inválidos de Notificaciones, con dobles de AWS. La revisión estática de los siete YAML y las pruebas simuladas **no acreditan empaquetado, permisos, concurrencia, transacciones reales ni integración AWS**.
+
+La revisión de configuración comprobó sintaxis YAML, existencia de handlers, claves e índices declarados de DynamoDB y configuración de respuesta parcial SQS. Se corrigió la propiedad del consumidor anterior de Oportunidades; los otros consumidores usan el nombre esperado por [Serverless Framework](https://www.serverless.com/framework/docs/providers/aws/events/sqs). Posteriormente Serverless empaquetó y desplegó las siete pilas; falta verificar en ejecución los permisos y los flujos de AWS. Preparar PyJWT y `JWT_SECRET` como se explica en la guía; no registrar secretos.
 
 ### Matriz que debe completarse en AWS
 
-Todos los casos están pendientes de evidencia en este documento. Al ejecutar, registrar fecha, responsable, cuenta/entorno, stage, pasos, resultado y enlace al registro o captura sin secretos.
+Para ejecutar los flujos desde el frontend y localizar tablas, eventos, colas y funciones en la consola, ver la [guía de pruebas del frontend y AWS](guia_pruebas_frontend_aws.md).
+
+El 2026-11-12, Serverless Framework 4.46.0 informó despliegue exitoso de `crm-compartido-dev` y los seis stacks de servicios en `us-east-1` (cuenta terminada en 5495), con `org: percycastro` y `app: crm-saas`. Esta evidencia corresponde al despliegue, no a pruebas funcionales. Las API base informadas fueron:
+
+El mismo día, `crm-frontend-hosting-dev` creó la aplicación Amplify `d38c15mc7g1yzr` y el trabajo de publicación manual `1` terminó `SUCCEED`. La dirección [frontend dev en Amplify](https://dev.d38c15mc7g1yzr.amplifyapp.com) respondió HTTP 200; los flujos desde ese dominio aún están pendientes. No está configurado el despliegue automático desde Git.
+
+| Servicio | URL base |
+| --- | --- |
+| Usuarios | `https://6ge9waha1h.execute-api.us-east-1.amazonaws.com` |
+| Clientes | `https://3l552xeuv9.execute-api.us-east-1.amazonaws.com` |
+| Oportunidades | `https://xka1oaqzad.execute-api.us-east-1.amazonaws.com` |
+| Actividades | `https://47idshdw10.execute-api.us-east-1.amazonaws.com` |
+| Productos y Cotizaciones | `https://so7sgzu6y6.execute-api.us-east-1.amazonaws.com` |
+| Notificaciones | `https://wjh7j70pil.execute-api.us-east-1.amazonaws.com` |
+
+Los demás casos están pendientes de evidencia en este documento. Al ejecutar, registrar fecha, responsable, cuenta/entorno, stage, pasos, resultado y enlace al registro o captura sin secretos.
 
 | Caso | Resultado esperado | Estado AWS / evidencia |
 | --- | --- | --- |
-| Desplegar compartido y los tres servicios | Capas/importaciones, tablas, GSI, Authorizer y publicadores disponibles con LabRole | Pendiente |
+| Frontend publicado en Amplify | Raíz pública disponible y trabajo de publicación exitoso | 2026-11-12, `dev`, trabajo 1 `SUCCEED`, raíz HTTP 200; login y flujos desde esa URL pendientes |
+| Desplegar compartido y los seis servicios | Stacks creados o actualizados sin error | Serverless informó éxito el 2026-11-12, `dev`; funcionamiento de recursos pendiente de prueba |
 | Auditar y aplicar migración sobre datos existentes | Ningún correo/principal duplicado; candados coherentes; rerun idempotente | Pendiente |
 | Login nuevo y login con SHA-256 anterior | Token; hash antiguo migra a PBKDF2 sin cambiar contraseña | Pendiente |
 | Token ausente, vencido o alterado | Sin token: 401; inválido/vencido: 403 según HTTP API; servicio no se ejecuta | Pendiente; el código local no acredita códigos de API Gateway |
@@ -780,23 +810,26 @@ Todos los casos están pendientes de evidencia en este documento. Al ejecutar, r
 | Dos admins intentan desactivarse mutuamente | Una transacción pierde su condición; queda al menos un admin activo | Pendiente |
 | JSON inválido y datos de tipo incorrecto | 400 con `codigo` y `mensaje` | Pendiente |
 | Crear dos principales simultáneamente | Uno 201, otro 409; una sola referencia principal | Pendiente |
-| Aislamiento y permisos con dos tenants | Listados separados; IDs ajenos 404; vendedor no elimina ni reasigna | Pendiente |
+| Aislamiento y permisos con dos tenants | Listados separados; IDs ajenos 404; vendedor no elimina ni reasigna | El usuario informó el 2026-11-12 que comprobó aislamiento; faltan detalles del procedimiento y evidencia por caso |
 | Archivar cliente/oportunidad y recorrer listados | Referencias conservadas; archivados no visibles; paginación continúa aun si una página queda vacía | Pendiente |
 | Caída temporal de SNS/publicador | Negocio y evento pendientes guardados; posterior publicación con mismo ID y atributo `tipo` | Pendiente |
 | Cola SQS de Oportunidades y DLQ | Suscripción y política permiten SNS; 3 intentos; errores parciales solo reintentan fallidos | Pendiente |
 | Publicar `cotizacion.aceptada` manualmente con atributo `tipo` | Cierre + historial `sistema` + evento pendiente `oportunidad.ganada`; reentrega no duplica cierre | Pendiente |
-| Productos: vendedor crea producto / gerente crea y desactiva | 403 / 201 y 200; inactivo no se puede cotizar (400 `producto_no_disponible`) | Pendiente |
+| Productos: vendedor crea producto / gerente crea y desactiva | 403 / 201 y 200; inactivo no se puede cotizar (400 `producto_no_disponible`) | El usuario informó que un vendedor no pudo crear producto desde la interfaz; falta comprobar y registrar respuesta directa de la API y los demás casos |
 | Cotización: crear, enviar, aceptar con 2 tenants | Total correcto; otro tenant recibe 404; borrador no se acepta (409) | Pendiente |
-| Cadena `cotizacion.aceptada` → Oportunidades | Tras el publicador, la oportunidad queda `ganada` con historial `sistema`; Notificaciones avisa a gerentes | Pendiente |
-| Notificaciones: evento real de Usuarios/Clientes | Aviso visible para el destinatario tras el intervalo del publicador; reentrega no duplica | Validado |
-| Notificaciones: aviso a rol y lectura individual | Dos gerentes ven el aviso; uno lo lee y el otro lo sigue viendo como no leído | Validado |
-| Notificaciones: mensaje dañado | 3 intentos y luego DLQ; el resto del lote se procesa | Validado |
+| Aceptación de cotización con oportunidad abierta | 202 pendiente; oportunidad ganada, historial `sistema`, cotización aceptada y aviso | El usuario informó el 2026-11-12 que, desde el frontend local con admin en AWS `dev`, creó producto y cotización, la envió y aceptó, y observó cotización aceptada y oportunidad ganada. Historial `sistema` y aviso no acreditados en esa prueba |
+| Aceptación con oportunidad perdida, archivada o inexistente | Vuelve a enviada con motivo; no se emite `cotizacion.aceptada` | Pendiente |
+| Aceptar y perder simultáneamente | Solo una operación cierra la oportunidad; resultado de la cotización coherente | Pendiente |
+| Notificaciones: evento real de Usuarios/Clientes | Aviso visible para el destinatario tras el intervalo del publicador; reentrega no duplica | Pendiente de evidencia verificable |
+| Notificaciones: aviso a rol y lectura individual | Dos gerentes ven el aviso; uno lo lee y el otro lo sigue viendo como no leído | Pendiente de evidencia verificable |
+| Notificaciones: mensaje dañado o sin datos obligatorios | Reintentos y luego DLQ; el resto del lote se procesa | Pendiente de evidencia verificable |
+| Actividades: oportunidad perdida | Se cancelan las actividades pendientes y se conserva el historial | Pendiente |
 
 ### Trabajo funcional pendiente
 
-- [x] **Notificaciones:** implementado (Validado evidencia AWS).
+- [x] **Notificaciones:** implementado; evidencia AWS pendiente de registrar con detalle.
 - [x] **Productos y Cotizaciones:** implementado y validado localmente; falta evidencia AWS (sección 14).
-- [ ] **Actividades:** CRUD, reglas y consumidores idempotentes; definir qué ocurre con seguimientos frente a eventos retrasados o fuera de orden.
+- [ ] **Actividades:** validar implementación en AWS y diseñar continuación durable para cancelaciones de gran volumen.
 - [ ] **Datos, frontend, informe y demo:** implementar generador/cargador coherentes y mínimo acordado de registros; integrar interfaz y documentar arquitectura/resultados.
 - [ ] **Acuerdos del grupo:** responsables por servicio, hitos sin fecha y revisión de decisiones del 10-nov (etapas solo hacia adelante, saltos, ganada manual, probabilidad, tope de monto y campos no editables).
 
@@ -804,7 +837,10 @@ Todos los casos están pendientes de evidencia en este documento. Al ejecutar, r
 
 - `cliente_nombre` es una instantánea opcional y puede quedar desactualizado. No hay sincronización automática.
 - Los servicios guardan identificadores ajenos sin comprobar existencia en tablas de otros servicios. El frontend/generador debe usar referencias válidas del mismo tenant.
-- Archivar conserva referencias pero no cancela actividades ni invalida cotizaciones: esos servicios aún no existen. No hay ruta de restauración ni purga.
+- Archivar conserva referencias pero no cancela actividades ni invalida cotizaciones automáticamente. No hay ruta de restauración ni purga.
+- Actividades puede agotar los tres intentos de SQS antes de terminar una cancelación de gran volumen; el mensaje llega a la DLQ y se necesita reprocesarlo. La solución de continuación durable queda pendiente.
+- La aceptación asíncrona puede permanecer pendiente si fallan los publicadores o una cola llega a la DLQ; faltan alarmas y un procedimiento probado de recuperación. La interfaz de cotizaciones aún no muestra el resultado.
+- Los eventos sin atributo SNS `tipo` pueden no llegar a la suscripción de Notificaciones; la validación y DLQ solo cubren mensajes que sí llegan a su cola.
 - Las tablas de eventos proporcionan entrega al menos una vez; no orden global ni deduplicación automática en consumidores futuros. Aún faltan alarmas de acumulación de pendientes y DLQ.
 - El Authorizer añade dos lecturas consistentes a cada autorización y rechaza si la base de identidad no está disponible. Una petición ya autorizada puede terminar tras una desactivación; un token aún vigente puede volver a servir si se reactiva al usuario con el mismo rol. No se implementa revocación permanente por sesión.
 - PBKDF2 se ejecuta en los registros y en el login/migración. Medir latencia y memoria en Lambda antes de la demo; no hay medidas AWS en esta revisión.

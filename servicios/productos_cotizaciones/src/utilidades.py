@@ -16,7 +16,7 @@ from crm_comun.eventos import confirmar, put, evento_pendiente
 
 MONEDAS = ('PEN', 'USD')
 ESTADOS_PRODUCTO = ('activo', 'inactivo')
-ESTADOS_COTIZACION = ('borrador', 'enviada', 'aceptada', 'rechazada')
+ESTADOS_COTIZACION = ('borrador', 'enviada', 'aceptacion_pendiente', 'aceptada', 'rechazada')
 ROLES_GESTION = ('gerente', 'admin')
 PRECIO_MAXIMO = 10 ** 12
 CANTIDAD_MAXIMA = 100_000

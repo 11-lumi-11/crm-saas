@@ -1,3 +1,5 @@
+org: percycastro
+app: crm-saas
 frameworkVersion: '4'
 service: crm-oportunidades
 
@@ -25,6 +27,7 @@ provider:
   environment:
     TABLE_OPORTUNIDADES: ${sls:stage}-t_oportunidades
     TABLE_HISTORIAL: ${sls:stage}-t_historial_etapas
+    TABLE_SOLICITUDES: ${sls:stage}-t_solicitudes_aceptacion
     INDEX_CLIENTE: cliente_id-index
     INDEX_RESPONSABLE: responsable_id-index
     INDEX_ETAPA: etapa-index
@@ -33,6 +36,13 @@ provider:
     SNS_TOPIC_ARN: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
 
 functions:
+  procesarSolicitudAceptacion:
+    handler: src/ProcesarSolicitudAceptacion.lambda_handler
+    events:
+      - sqs:
+          arn: !GetAtt ColaSolicitudAceptacion.Arn
+          batchSize: 10
+          functionResponseType: ReportBatchItemFailures
   publicarEventos:
     handler: crm_comun.eventos.lambda_handler
     timeout: 60
@@ -110,11 +120,60 @@ functions:
       - sqs:
           arn: !GetAtt ColaCotizacionAceptada.Arn
           batchSize: 10
-          functionResponseTypes:
-            - ReportBatchItemFailures
+          functionResponseType: ReportBatchItemFailures
 
 resources:
   Resources:
+    TablaSolicitudesAceptacion:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_SOLICITUDES}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: tenant_id
+            AttributeType: S
+          - AttributeName: solicitud_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenant_id
+            KeyType: HASH
+          - AttributeName: solicitud_id
+            KeyType: RANGE
+    ColaSolicitudAceptacionDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        MessageRetentionPeriod: 1209600
+    ColaSolicitudAceptacion:
+      Type: AWS::SQS::Queue
+      Properties:
+        VisibilityTimeout: 120
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ColaSolicitudAceptacionDLQ.Arn
+          maxReceiveCount: 3
+    PoliticaSolicitudAceptacion:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues: [!Ref ColaSolicitudAceptacion]
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal: {Service: sns.amazonaws.com}
+              Action: sqs:SendMessage
+              Resource: !GetAtt ColaSolicitudAceptacion.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
+    SuscripcionSolicitudAceptacion:
+      Type: AWS::SNS::Subscription
+      DependsOn: PoliticaSolicitudAceptacion
+      Properties:
+        TopicArn: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
+        Protocol: sqs
+        Endpoint: !GetAtt ColaSolicitudAceptacion.Arn
+        RawMessageDelivery: false
+        FilterPolicy:
+          tipo: [cotizacion.aceptacion_solicitada]
     TablaEventos:
       Type: AWS::DynamoDB::Table
       Properties:

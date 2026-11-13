@@ -1,3 +1,5 @@
+org: percycastro
+app: crm-saas
 frameworkVersion: '4'
 service: crm-clientes
 

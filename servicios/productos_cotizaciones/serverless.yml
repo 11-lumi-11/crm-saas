@@ -1,3 +1,5 @@
+org: percycastro
+app: crm-saas
 frameworkVersion: '4'
 service: crm-productos-cotizaciones
 
@@ -31,6 +33,13 @@ provider:
     SNS_TOPIC_ARN: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
 
 functions:
+  procesarResultadoAceptacion:
+    handler: src/ProcesarResultadoAceptacion.lambda_handler
+    events:
+      - sqs:
+          arn: !GetAtt ColaResultadoAceptacion.Arn
+          batchSize: 10
+          functionResponseType: ReportBatchItemFailures
   # Publicador del outbox (capa común): envía a SNS los eventos pendientes cada minuto
   publicarEventos:
     handler: crm_comun.eventos.lambda_handler
@@ -142,6 +151,41 @@ functions:
 
 resources:
   Resources:
+    ColaResultadoAceptacionDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        MessageRetentionPeriod: 1209600
+    ColaResultadoAceptacion:
+      Type: AWS::SQS::Queue
+      Properties:
+        VisibilityTimeout: 120
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ColaResultadoAceptacionDLQ.Arn
+          maxReceiveCount: 3
+    PoliticaResultadoAceptacion:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues: [!Ref ColaResultadoAceptacion]
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal: {Service: sns.amazonaws.com}
+              Action: sqs:SendMessage
+              Resource: !GetAtt ColaResultadoAceptacion.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
+    SuscripcionResultadoAceptacion:
+      Type: AWS::SNS::Subscription
+      DependsOn: PoliticaResultadoAceptacion
+      Properties:
+        TopicArn: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
+        Protocol: sqs
+        Endpoint: !GetAtt ColaResultadoAceptacion.Arn
+        RawMessageDelivery: false
+        FilterPolicy:
+          tipo: [oportunidad.aceptacion_confirmada, oportunidad.aceptacion_rechazada]
     TablaEventos:
       Type: AWS::DynamoDB::Table
       Properties:

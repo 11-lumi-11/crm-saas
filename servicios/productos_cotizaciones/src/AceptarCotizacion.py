@@ -1,6 +1,6 @@
 from src.utilidades import (
     ErrorNegocio, manejar_errores, respuesta, obtener_claims, leer_cotizacion, exigir_estado,
-    esta_vencida, cambiar_estado
+    esta_vencida, cambiar_estado, generar_id
 )
 
 
@@ -14,12 +14,14 @@ def lambda_handler(event, context):
     if esta_vencida(cotizacion):
         raise ErrorNegocio(409, 'cotizacion_vencida', 'La cotización ya venció; no se puede aceptar')
 
-    # Oportunidades escucha este evento y marca la oportunidad como ganada
-    fecha = cambiar_estado(tenant_id, cotizacion_id, 'enviada', 'aceptada', 'cotizacion.aceptada', {
+    solicitud_id = generar_id('sol')
+    fecha = cambiar_estado(tenant_id, cotizacion_id, 'enviada', 'aceptacion_pendiente', 'cotizacion.aceptacion_solicitada', {
         'cotizacion_id': cotizacion_id,
         'oportunidad_id': cotizacion['oportunidad_id'],
         'cliente_id': cotizacion['cliente_id'],
-        'total': cotizacion['total']
-    }, campos_fecha=('fecha_respuesta',), extra={'respondida_por': usuario_id})
-    return respuesta(200, {'mensaje': 'Cotización aceptada', 'cotizacion_id': cotizacion_id,
-                           'estado': 'aceptada', 'fecha_respuesta': fecha})
+        'solicitud_id': solicitud_id
+    }, extra={'solicitud_aceptacion_id': solicitud_id, 'respondida_por': usuario_id,
+              'resultado_aceptacion': ''})
+    return respuesta(202, {'mensaje': 'Aceptación pendiente de confirmación; consulte la cotización.',
+                           'cotizacion_id': cotizacion_id, 'estado': 'aceptacion_pendiente',
+                           'fecha_solicitud': fecha})

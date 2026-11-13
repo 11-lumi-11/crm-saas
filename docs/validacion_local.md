@@ -2,6 +2,8 @@
 
 Revisión: 2026-11-11. No se desplegó ni se ejecutó la migración en AWS durante esta revisión.
 
+Actualización 2026-11-12: Serverless informó despliegue exitoso de las siete pilas en `dev`, `us-east-1`. No se ejecutaron pruebas funcionales ni la migración en esta operación; las URL están en la sección 14 del documento base.
+
 ## Pruebas locales
 
 Desde la raíz, con Python 3.14:
@@ -12,9 +14,13 @@ La suite privada cubrió contratos HTTP, PBKDF2 y migración de SHA-256, estado/
 
 Resultado de esta revisión: **28 pruebas pasan**, compilación sin errores y análisis estático sin hallazgos con pyflakes. No se midió rendimiento de PBKDF2 en Lambda.
 
+El 2026-11-12 se añadieron pruebas reproducibles en `tests/` para la aceptación asíncrona y los eventos inválidos de Notificaciones. Usan dobles de AWS y se ejecutan con `.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v`. No sustituyen el empaquetado ni las pruebas en AWS.
+
 ## Preparación de despliegue
 
 Requisitos: AWS Academy activa con LabRole, Serverless Framework 4, Python 3.14 y `JWT_SECRET` configurado en el entorno de despliegue. El framework usa credenciales locales; no se deben registrar en documentos ni subir al repositorio. La región actual es `us-east-1`.
+
+Para el despliegue del 12-nov se generó `JWT_SECRET` en el archivo local `.env` de la raíz, excluido por Git y accesible solo al usuario del sistema. Para futuros despliegues de `compartido` y `usuarios`, cargar el mismo valor en el entorno antes de ejecutar Serverless, por ejemplo desde la raíz con `set -a; source .env; set +a`. No publicar ni compartir el archivo. Cambiar el secreto invalida los JWT anteriores y exige desplegar ambos componentes con el mismo valor.
 
 Preparar la capa PyJWT desde la raíz:
 
@@ -30,6 +36,11 @@ Cada carpeta contiene su stack; ejecutar `serverless deploy --stage dev` dentro 
 2. `servicios/usuarios`.
 3. `servicios/clientes`.
 4. `servicios/oportunidades`.
+5. `servicios/actividades`.
+6. `servicios/productos_cotizaciones`.
+7. `servicios/notificaciones`.
+
+Crear los eventos de prueba después de desplegar todos los consumidores. El despliegue requiere autorización previa; esta guía no acredita que se haya ejecutado.
 
 Usar el mismo stage en todos. Si cambia una capa, desplegar nuevamente los servicios dependientes para tomar su nuevo ARN/version. No retirar stacks de otros integrantes. El Authorizer rechazará accesos hasta que existan usuario y tenant activos en las tablas del stage.
 
@@ -59,7 +70,7 @@ Conservar el resultado sin datos personales y completar las pruebas de registro,
 
 ## Eventos y verificación funcional
 
-Los eventos de Usuarios, Clientes y Oportunidades se guardan en sus tablas `dev-t_eventos_<servicio>` dentro de la transacción de negocio. Cada publicador corre una vez por minuto, envía los pendientes a SNS y marca enviados con TTL de siete días. Los pendientes no expiran. No hay publicación inmediata ni garantía de orden global. Un fallo tras publicar y antes de marcar puede duplicar el mismo `evento_id`; el consumidor debe ser idempotente.
+Los eventos de Usuarios, Clientes, Oportunidades, Actividades y Productos y Cotizaciones se guardan en sus tablas `dev-t_eventos_<servicio>` dentro de la transacción de negocio. Cada publicador corre una vez por minuto, envía los pendientes a SNS y marca enviados con TTL de siete días. Los pendientes no expiran. No hay publicación inmediata ni garantía de orden global. Un fallo tras publicar y antes de marcar puede duplicar el mismo `evento_id`; el consumidor debe ser idempotente.
 
 La función `publicarEventos` también se puede invocar manualmente en un entorno de prueba para evitar esperar el intervalo. Revisar logs y pendientes si no llegan avisos. Verificar SNS → SQS → consumidor por separado, incluyendo atributo `tipo`, sobre SNS, errores parciales y DLQ tras tres intentos.
 

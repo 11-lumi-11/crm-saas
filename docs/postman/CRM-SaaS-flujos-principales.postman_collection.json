@@ -1,0 +1,1337 @@
+{
+  "info": {
+    "_postman_id": "02c53fab-0c97-4f14-984a-5be2a3e06645",
+    "name": "CRM SaaS - Flujos principales y eventos AWS dev",
+    "description": "Colección adicional para ejecutar MANUALMENTE en orden. Crea una empresa, dos usuarios y registros reales en AWS dev. Usa nombres/correos únicos por ejecución, guarda IDs y tokens como variables de colección y valida flujos asíncronos. Consulte README-flujos-principales.md. No usar Collection Runner sin esperas y reintentos explícitos.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Preparación: empresa, usuarios y cliente",
+      "description": "Ejecutar en orden. El registro crea datos reales de prueba y genera nombres/correos únicos; guarde los datos si desea reutilizarlos. No reinicie el primer paso a mitad de una ejecución. Las contraseñas de demo son editables en las variables de colección.",
+      "item": [
+        {
+          "name": "1.1 Registrar empresa y administrador",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const sufijo = Date.now().toString() + Math.floor(Math.random() * 10000).toString();",
+                  "const limpiar = ['tenant_id','token_admin','token_gerente','usuario_admin_id','usuario_gerente_id','cliente_id','oportunidad_ganada_id','oportunidad_perdida_id','producto_id','cotizacion_ganada_id','cotizacion_perdida_id','actividad_perdida_id','notificacion_gerente_id'];",
+                  "limpiar.forEach(k => pm.collectionVariables.unset(k));",
+                  "pm.collectionVariables.set('sufijo', sufijo);",
+                  "pm.collectionVariables.set('empresa_demo', 'CRM Demo ' + sufijo);",
+                  "pm.collectionVariables.set('correo_admin_demo', 'admin.' + sufijo + '@demo.test');",
+                  "pm.collectionVariables.set('correo_gerente_demo', 'gerente.' + sufijo + '@demo.test');",
+                  "pm.collectionVariables.set('nombre_cliente_demo', 'Cliente Demo ' + sufijo);",
+                  "pm.collectionVariables.set('fecha_actividad', new Date(Date.now() + 86400000 * 2).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('tenant_id presente', function () { pm.expect(data.tenant_id).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.tenant_id === 'string' && data.tenant_id) pm.collectionVariables.set('tenant_id', data.tenant_id);",
+                  "  pm.test('usuario_id presente', function () { pm.expect(data.usuario_id).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.usuario_id === 'string' && data.usuario_id) pm.collectionVariables.set('usuario_admin_id', data.usuario_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{usuarios_url}}/tenants"
+            },
+            "description": "Crea una empresa de prueba nueva; el script genera identificadores únicos por ejecución.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre_empresa\": \"{{empresa_demo}}\",\n  \"nombre_admin\": \"Admin Demo\",\n  \"correo\": \"{{correo_admin_demo}}\",\n  \"contrasena\": \"{{contrasena_demo}}\",\n  \"rubro\": \"Comercio\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1.2 Iniciar sesión como administrador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('token presente', function () { pm.expect(data.token).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.token === 'string' && data.token) pm.collectionVariables.set('token_admin', data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{usuarios_url}}/usuarios/login"
+            },
+            "description": "El índice de correo puede tardar en actualizarse: si devuelve 401 inmediatamente después de crear el usuario, espere unos segundos y reintente.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo_admin_demo}}\",\n  \"contrasena\": \"{{contrasena_demo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1.3 Crear gerente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('usuario_id presente', function () { pm.expect(data.usuario_id).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.usuario_id === 'string' && data.usuario_id) pm.collectionVariables.set('usuario_gerente_id', data.usuario_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{usuarios_url}}/usuarios"
+            },
+            "description": "Se utilizará para comprobar el aviso dirigido al rol gerente.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Gerente Demo\",\n  \"correo\": \"{{correo_gerente_demo}}\",\n  \"contrasena\": \"{{contrasena_demo}}\",\n  \"rol\": \"gerente\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1.4 Iniciar sesión como gerente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('token presente', function () { pm.expect(data.token).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.token === 'string' && data.token) pm.collectionVariables.set('token_gerente', data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{usuarios_url}}/usuarios/login"
+            },
+            "description": "Si el usuario recién creado devuelve 401, espere la actualización del índice de correo y reintente.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo_gerente_demo}}\",\n  \"contrasena\": \"{{contrasena_demo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1.5 Crear cliente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('cliente_id presente', function () { pm.expect(data.cliente_id).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.cliente_id === 'string' && data.cliente_id) pm.collectionVariables.set('cliente_id', data.cliente_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{clientes_url}}/clientes"
+            },
+            "description": "Publica cliente.creado mediante outbox; el responsable es el administrador autenticado.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{nombre_cliente_demo}}\",\n  \"tipo\": \"empresa\",\n  \"industria\": \"Comercio\",\n  \"ciudad\": \"Lima\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "1.6 Comprobar notificación de cliente creado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Llegó aviso del cliente de esta ejecución\", function () { pm.expect(data.notificaciones.some(n => n.tipo === 'cliente.creado' && n.mensaje.includes(pm.collectionVariables.get('nombre_cliente_demo')))).to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{notificaciones_url}}/notificaciones?limite=100"
+            },
+            "description": "Espere unos minutos y repita hasta observar el aviso del cliente. El evento se publica por outbox y atraviesa SNS/SQS; si la página tiene cursor, revise la siguiente página.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Venta exitosa: eventos, actividades y cotización",
+      "description": "Ejecutar después de la carpeta 1. Las consultas de verificación pueden necesitar varios minutos y deben repetirse manualmente.",
+      "item": [
+        {
+          "name": "2.1 Crear oportunidad",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('oportunidad_id presente', function () { pm.expect(data.oportunidad_id).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.oportunidad_id === 'string' && data.oportunidad_id) pm.collectionVariables.set('oportunidad_ganada_id', data.oportunidad_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{oportunidades_url}}/oportunidades"
+            },
+            "description": "Genera oportunidad.creada.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente_id\": \"{{cliente_id}}\",\n  \"titulo\": \"Venta demo exitosa\",\n  \"monto_estimado\": 500,\n  \"moneda\": \"PEN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.2 Cambiar etapa a calificada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{oportunidades_url}}/oportunidades/{{oportunidad_ganada_id}}/etapa"
+            },
+            "description": "Genera oportunidad.etapa_cambiada, que Actividades consume para crear un seguimiento.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"etapa\": \"calificada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.3 Verificar seguimiento por cambio de etapa",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Existe seguimiento automático de etapa\", function () { pm.expect(data.actividades.some(a => a.origen === 'automatica' && a.titulo === 'Seguimiento comercial')).to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{actividades_url}}/actividades?oportunidad_id={{oportunidad_ganada_id}}&limite=100"
+            },
+            "description": "Espere y repita. Debe aparecer una tarea automática con título Seguimiento comercial. Si hay cursor, continúe paginando.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.4 Crear producto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('producto_id presente', function () { pm.expect(data.producto_id).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.producto_id === 'string' && data.producto_id) pm.collectionVariables.set('producto_id', data.producto_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{productos_url}}/productos"
+            },
+            "description": "Solo gerente o admin puede crear productos.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Servicio demo\",\n  \"descripcion\": \"Producto para prueba\",\n  \"precio\": 250,\n  \"moneda\": \"PEN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.5 Crear cotización",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('cotizacion_id presente', function () { pm.expect(data.cotizacion_id).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.cotizacion_id === 'string' && data.cotizacion_id) pm.collectionVariables.set('cotizacion_ganada_id', data.cotizacion_id);",
+                  "  pm.test(\"Total 500 PEN\", function () { pm.expect(data.total === 500 && data.moneda === 'PEN').to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{productos_url}}/cotizaciones"
+            },
+            "description": "Dos unidades de S/ 250; debe devolver total 500.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente_id\": \"{{cliente_id}}\",\n  \"oportunidad_id\": \"{{oportunidad_ganada_id}}\",\n  \"moneda\": \"PEN\",\n  \"items\": [\n    {\n      \"producto_id\": \"{{producto_id}}\",\n      \"cantidad\": 2\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.6 Enviar cotización",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{productos_url}}/cotizaciones/{{cotizacion_ganada_id}}/enviar"
+            },
+            "description": "Publica cotizacion.enviada. Actividades programa un seguimiento y Notificaciones avisa al creador.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.7 Verificar seguimiento de cotización",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Existe seguimiento de esta cotización\", function () { pm.expect(data.actividades.some(a => a.origen === 'automatica' && a.titulo === 'Seguimiento de cotización' && a.descripcion.includes(pm.collectionVariables.get('cotizacion_ganada_id')))).to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{actividades_url}}/actividades?oportunidad_id={{oportunidad_ganada_id}}&limite=100"
+            },
+            "description": "Espere y repita hasta que aparezca la tarea automática de esta cotización. Si hay cursor, continúe paginando.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.8 Solicitar aceptación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', function () { pm.response.to.have.status(202); });",
+                  "if (pm.response.code === 202) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Estado inicial pendiente\", function () { pm.expect(data.estado === 'aceptacion_pendiente').to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{productos_url}}/cotizaciones/{{cotizacion_ganada_id}}/aceptar"
+            },
+            "description": "La respuesta 202 significa pendiente, todavía no aceptada. No repita este PUT; continúe consultando el GET.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.9 Consultar cotización hasta confirmación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Aceptación confirmada\", function () { pm.expect(data.cotizacion.estado === 'aceptada').to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{productos_url}}/cotizaciones/{{cotizacion_ganada_id}}"
+            },
+            "description": "Espere y repita este GET hasta que el estado sea aceptada. Puede tardar varios minutos porque intervienen dos publicadores. La prueba falla mientras continúe pendiente; esto no demuestra por sí solo un error.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.10 Verificar oportunidad ganada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Oportunidad ganada\", function () { pm.expect(data.oportunidad.etapa === 'ganada').to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{oportunidades_url}}/oportunidades/{{oportunidad_ganada_id}}"
+            },
+            "description": "Tras la confirmación, la oportunidad debe estar ganada.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.11 Verificar aviso de cotización al gerente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  const aviso = data.notificaciones.find(n => n.tipo === 'cotizacion.aceptada' && n.mensaje.includes(pm.collectionVariables.get('cotizacion_ganada_id')));",
+                  "  pm.test('Llegó aviso de cotización aceptada', function () { pm.expect(aviso).to.exist; });",
+                  "  if (aviso) pm.collectionVariables.set('notificacion_gerente_id', aviso.notificacion_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{notificaciones_url}}/notificaciones?limite=100"
+            },
+            "description": "Usa el token del gerente. Espere y repita hasta ver cotizacion.aceptada de esta ejecución; si hay cursor, continúe paginando.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_gerente}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.12 Marcar aviso del gerente como leído",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Aviso marcado como leído\", function () { pm.expect(data.leida === true).to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{notificaciones_url}}/notificaciones/{{notificacion_gerente_id}}/leer"
+            },
+            "description": "Ejecutar solo cuando el paso anterior haya encontrado el aviso; la lectura pertenece al gerente autenticado.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_gerente}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Oportunidad perdida: cancelación y aceptación denegada",
+      "description": "Ejecutar después de la carpeta 1 y del paso 2.4, que crea el producto. El cambio a perdida es inmediato; la cancelación y la decisión sobre la cotización son asíncronas.",
+      "item": [
+        {
+          "name": "3.1 Crear otra oportunidad",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('oportunidad_id presente', function () { pm.expect(data.oportunidad_id).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.oportunidad_id === 'string' && data.oportunidad_id) pm.collectionVariables.set('oportunidad_perdida_id', data.oportunidad_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{oportunidades_url}}/oportunidades"
+            },
+            "description": "Oportunidad independiente de la venta exitosa.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente_id\": \"{{cliente_id}}\",\n  \"titulo\": \"Venta demo perdida\",\n  \"monto_estimado\": 250,\n  \"moneda\": \"PEN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3.2 Crear actividad pendiente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('actividad_id presente', function () { pm.expect(data.actividad_id).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.actividad_id === 'string' && data.actividad_id) pm.collectionVariables.set('actividad_perdida_id', data.actividad_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{actividades_url}}/actividades"
+            },
+            "description": "Actividad que debe cancelarse cuando se procese oportunidad.perdida.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"llamada\",\n  \"titulo\": \"Llamada de seguimiento\",\n  \"cliente_id\": \"{{cliente_id}}\",\n  \"oportunidad_id\": \"{{oportunidad_perdida_id}}\",\n  \"fecha_programada\": \"{{fecha_actividad}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3.3 Crear cotización para esta oportunidad",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test('cotizacion_id presente', function () { pm.expect(data.cotizacion_id).to.be.a('string').and.not.empty; });",
+                  "  if (typeof data.cotizacion_id === 'string' && data.cotizacion_id) pm.collectionVariables.set('cotizacion_perdida_id', data.cotizacion_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{productos_url}}/cotizaciones"
+            },
+            "description": "Reutiliza el producto creado en el paso 2.4.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente_id\": \"{{cliente_id}}\",\n  \"oportunidad_id\": \"{{oportunidad_perdida_id}}\",\n  \"moneda\": \"PEN\",\n  \"items\": [\n    {\n      \"producto_id\": \"{{producto_id}}\",\n      \"cantidad\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3.4 Enviar cotización",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{productos_url}}/cotizaciones/{{cotizacion_perdida_id}}/enviar"
+            },
+            "description": "Envía la cotización antes de cerrar la oportunidad.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3.5 Marcar oportunidad como perdida",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{oportunidades_url}}/oportunidades/{{oportunidad_perdida_id}}/etapa"
+            },
+            "description": "Publica oportunidad.perdida; el consumidor de Actividades cancela pendientes de forma asíncrona.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"etapa\": \"perdida\",\n  \"motivo_perdida\": \"El cliente eligió otra propuesta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3.6 Consultar actividad hasta cancelación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Actividad cancelada\", function () { pm.expect(data.actividad.estado === 'cancelada').to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{actividades_url}}/actividades/{{actividad_perdida_id}}"
+            },
+            "description": "Espere y repita hasta que el estado sea cancelada. La prueba fallará mientras el evento aún no se haya procesado.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3.7 Solicitar aceptación de cotización",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', function () { pm.response.to.have.status(202); });",
+                  "if (pm.response.code === 202) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Aceptación pendiente\", function () { pm.expect(data.estado === 'aceptacion_pendiente').to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{productos_url}}/cotizaciones/{{cotizacion_perdida_id}}/aceptar"
+            },
+            "description": "La solicitud se acepta inicialmente para evaluación, no significa que la cotización haya sido aceptada. No repetir el PUT.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3.8 Consultar cotización hasta rechazo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Rechazo por oportunidad perdida\", function () { pm.expect(data.cotizacion.estado === 'enviada' && typeof data.cotizacion.resultado_aceptacion === 'string' && data.cotizacion.resultado_aceptacion.includes('perdida')).to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{productos_url}}/cotizaciones/{{cotizacion_perdida_id}}"
+            },
+            "description": "Espere y repita hasta que vuelva a enviada y muestre el motivo de oportunidad perdida. Puede tardar varios minutos.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3.9 Verificar oportunidad sigue perdida",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.test(\"Oportunidad permanece perdida\", function () { pm.expect(data.oportunidad.etapa === 'perdida').to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{oportunidades_url}}/oportunidades/{{oportunidad_perdida_id}}"
+            },
+            "description": "La solicitud no debe reabrir ni ganar la oportunidad.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_admin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "usuarios_url",
+      "value": "https://6ge9waha1h.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "clientes_url",
+      "value": "https://3l552xeuv9.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "oportunidades_url",
+      "value": "https://xka1oaqzad.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "actividades_url",
+      "value": "https://47idshdw10.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "productos_url",
+      "value": "https://so7sgzu6y6.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "notificaciones_url",
+      "value": "https://wjh7j70pil.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "contrasena_demo",
+      "value": "PruebaCRM2026!",
+      "type": "string"
+    },
+    {
+      "key": "sufijo",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "empresa_demo",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "correo_admin_demo",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "correo_gerente_demo",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "nombre_cliente_demo",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "fecha_actividad",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenant_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token_admin",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token_gerente",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "usuario_admin_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "usuario_gerente_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cliente_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "oportunidad_ganada_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "oportunidad_perdida_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "producto_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cotizacion_ganada_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cotizacion_perdida_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "actividad_perdida_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notificacion_gerente_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
