@@ -32,6 +32,10 @@ provider:
     TABLE_EVENTOS: ${sls:stage}-t_eventos_productos_cotizaciones
     SNS_TOPIC_ARN: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
 
+custom:
+  # Bucket de importación de este servicio (nombre único global: incluye stage y cuenta)
+  bucketImportaciones: ${self:service}-${sls:stage}-imp-${aws:accountId}
+
 functions:
   procesarResultadoAceptacion:
     handler: src/ProcesarResultadoAceptacion.lambda_handler
@@ -148,6 +152,21 @@ functions:
           method: delete
           authorizer:
             name: authorizerJwt
+
+  # Carga masiva: S3 (ObjectCreated en importaciones/*.jsonl) -> Lambda -> DynamoDB de este
+  # servicio. Serverless crea el bucket y el permiso para que S3 invoque la función.
+  # Ver datos/README.md.
+  importarDatos:
+    handler: src/ImportarDatos.lambda_handler
+    timeout: 300
+    memorySize: 512
+    events:
+      - s3:
+          bucket: ${self:custom.bucketImportaciones}
+          event: s3:ObjectCreated:*
+          rules:
+            - prefix: importaciones/
+            - suffix: .jsonl
 
 resources:
   Resources:
