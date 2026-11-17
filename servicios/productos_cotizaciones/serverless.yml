@@ -33,6 +33,12 @@ provider:
     SNS_TOPIC_ARN: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
 
 functions:
+  recuperarAceptaciones:
+    handler: src/RecuperarAceptaciones.lambda_handler
+    timeout: 60
+    reservedConcurrency: 1
+    events:
+      - schedule: rate(5 minutes)
   procesarResultadoAceptacion:
     handler: src/ProcesarResultadoAceptacion.lambda_handler
     events:
@@ -155,6 +161,21 @@ resources:
       Type: AWS::SQS::Queue
       Properties:
         MessageRetentionPeriod: 1209600
+    AlarmaResultadoAceptacionDLQ:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmDescription: Mensajes de resultado de aceptación pendientes de revisión en la DLQ
+        Namespace: AWS/SQS
+        MetricName: ApproximateNumberOfMessagesVisible
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt ColaResultadoAceptacionDLQ.QueueName
+        Statistic: Maximum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
     ColaResultadoAceptacion:
       Type: AWS::SQS::Queue
       Properties:
@@ -243,12 +264,24 @@ resources:
             AttributeType: S
           - AttributeName: estado
             AttributeType: S
+          - AttributeName: recuperacion_estado
+            AttributeType: S
+          - AttributeName: proximo_reintento
+            AttributeType: S
         KeySchema:
           - AttributeName: tenant_id
             KeyType: HASH
           - AttributeName: cotizacion_id
             KeyType: RANGE
         GlobalSecondaryIndexes:
+          - IndexName: recuperacion-aceptacion-index
+            KeySchema:
+              - AttributeName: recuperacion_estado
+                KeyType: HASH
+              - AttributeName: proximo_reintento
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
           - IndexName: ${self:provider.environment.INDEX_OPORTUNIDAD}
             KeySchema:
               - AttributeName: tenant_id

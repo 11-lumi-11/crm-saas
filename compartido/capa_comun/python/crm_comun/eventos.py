@@ -7,7 +7,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.types import TypeSerializer
 
-from crm_comun import ahora, generar_id, convertir_decimal
+from crm_comun import ahora, generar_id, convertir_decimal, registrar_fallo, registrar_excepciones
 
 
 def serializar(datos):
@@ -36,6 +36,7 @@ def confirmar(operaciones, tipo, tenant_id, datos):
         TransactItems=[*operaciones, evento_pendiente(tipo, tenant_id, datos)])
 
 
+@registrar_excepciones
 def lambda_handler(event, context):
     """Publicación al menos una vez. Un fallo conserva el evento pendiente para la próxima ejecución."""
     tabla = boto3.resource('dynamodb').Table(os.environ['TABLE_EVENTOS'])
@@ -58,9 +59,9 @@ def lambda_handler(event, context):
                                   ExpressionAttributeNames={'#estado': 'estado'},
                                   ExpressionAttributeValues={':enviado': 'enviado', ':ttl': int(time.time()) + 604800})
                 enviados += 1
-            except Exception:
+            except Exception as error:
                 # No registrar payloads ni secretos. El registro permanece pendiente.
-                print(f"Publicación pendiente: {item['evento_id']}")
+                registrar_fallo('publicar_evento_pendiente', error)
         if not pagina.get('LastEvaluatedKey'):
             break
         consulta['ExclusiveStartKey'] = pagina['LastEvaluatedKey']

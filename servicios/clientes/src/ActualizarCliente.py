@@ -1,4 +1,5 @@
-from crm_comun import ahora, validar_texto
+from crm_comun import ahora, validar_texto, validar_correo
+from crm_comun.eventos import evento_pendiente, serializar
 from botocore.exceptions import ClientError
 from crm_comun import respuesta, leer_body, claims, manejar_errores, ErrorNegocio, validar_responsable
 import boto3
@@ -17,7 +18,7 @@ def lambda_handler(event, context):
     body = leer_body(event)
 
     table = boto3.resource('dynamodb').Table(os.environ['TABLE_CLIENTES'])
-    actual = table.get_item(Key={'tenant_id': tenant_id, 'cliente_id': cliente_id}).get('Item')
+    actual = table.get_item(Key={'tenant_id': tenant_id, 'cliente_id': cliente_id}, ConsistentRead=True).get('Item')
     if not actual or actual.get('eliminado'):
         return respuesta(404, {'codigo': 'no_encontrado', 'mensaje': 'El cliente no existe'})
 
@@ -37,6 +38,8 @@ def lambda_handler(event, context):
     for campo in ('documento', 'correo', 'telefono', 'industria', 'ciudad'):
         if campo in body and not isinstance(body[campo], str):
             raise ErrorNegocio(400, 'datos_invalidos', f'{campo} debe ser texto')
+    if 'correo' in body:
+        body['correo'] = validar_correo(body['correo']) if body['correo'].strip() else ''
     cambios, valores, nombres = [], {}, {}
     for campo in CAMPOS:
         if campo not in body or body[campo] is None:
@@ -56,6 +59,29 @@ def lambda_handler(event, context):
 
     cambios.append('fecha_actualizacion = :fecha')
     valores[':fecha'] = ahora()
+
+    if 'correo' in body:
+        revision = actual.get('revision_correo', 0)
+        cambios.append('revision_correo = :revision_nueva')
+        valores[':revision_nueva'] = revision + 1
+        valores[':revision_anterior'] = revision
+        condicion = 'attribute_exists(cliente_id) AND attribute_not_exists(fecha_eliminacion) AND '
+        condicion += '(revision_correo = :revision_anterior OR attribute_not_exists(revision_correo))'
+        operacion = {'Update': {'TableName': os.environ['TABLE_CLIENTES'],
+            'Key': serializar({'tenant_id': tenant_id, 'cliente_id': cliente_id}),
+            'UpdateExpression': 'SET ' + ', '.join(cambios), 'ConditionExpression': condicion,
+            'ExpressionAttributeValues': serializar(valores), 'ExpressionAttributeNames': nombres}}
+        try:
+            boto3.client('dynamodb').transact_write_items(TransactItems=[operacion,
+                evento_pendiente('cliente.correo_actualizado', tenant_id,
+                    {'cliente_id': cliente_id, 'correo': body['correo'].strip().lower(), 'revision': revision + 1})])
+        except ClientError as error:
+            razones = error.response.get('CancellationReasons', [])
+            if error.response['Error']['Code'] == 'TransactionCanceledException' and razones and razones[0].get('Code') == 'ConditionalCheckFailed':
+                raise ErrorNegocio(409, 'conflicto_cliente', 'El cliente cambió; vuelva a intentar')
+            raise
+        response = table.get_item(Key={'tenant_id': tenant_id, 'cliente_id': cliente_id}, ConsistentRead=True)
+        return respuesta(200, {'mensaje': 'Cliente actualizado correctamente', 'cliente': response['Item']})
 
     try:
         response = table.update_item(

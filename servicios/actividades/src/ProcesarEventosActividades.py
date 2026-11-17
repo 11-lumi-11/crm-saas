@@ -4,14 +4,13 @@ import json
 import os
 from datetime import datetime, timedelta
 
-from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
-from crm_comun import ahora, validar_texto, validar_responsable
+from crm_comun import ahora, validar_texto, validar_responsable, registrar_fallo
 from crm_comun.eventos import put
 from src.utilidades import (tabla, cliente, serializar, validar_id, fecha_utc,
     nueva_actividad, proteger_oportunidad, control, es_condicional)
 
-EVENTOS = ('oportunidad.etapa_cambiada', 'oportunidad.ganada',
+EVENTOS = ('oportunidad.ganada',
            'oportunidad.perdida', 'cotizacion.enviada')
 
 
@@ -38,12 +37,7 @@ def leer_evento(registro):
             raise ValueError('total debe ser numérico')
     else:
         validar_responsable(datos.get('responsable_id'))
-        if evento['tipo'] == 'oportunidad.etapa_cambiada':
-            abiertas = ('nueva', 'calificada', 'propuesta', 'en_negociacion')
-            anterior, nueva = datos.get('etapa_anterior'), datos.get('etapa_nueva')
-            if anterior not in abiertas or nueva not in abiertas or abiertas.index(nueva) <= abiertas.index(anterior):
-                raise ValueError('Cambio entre etapas abiertas inválido')
-        elif evento['tipo'] == 'oportunidad.perdida':
+        if evento['tipo'] == 'oportunidad.perdida':
             validar_texto(datos.get('motivo_perdida'), 'motivo_perdida')
         else:
             validar_texto(datos.get('titulo'), 'titulo')
@@ -80,7 +74,6 @@ def marcar_procesado(evento):
 
 def plazo(tipo):
     variable, defecto = {
-        'oportunidad.etapa_cambiada': ('DIAS_SEGUIMIENTO_ETAPA', '1'),
         'oportunidad.ganada': ('DIAS_INICIO_SERVICIO', '1'),
         'cotizacion.enviada': ('DIAS_SEGUIMIENTO_COTIZACION', '3')}[tipo]
     dias = int(os.environ.get(variable, defecto))
@@ -92,14 +85,13 @@ def plazo(tipo):
 def crear_automatica(evento):
     tenant_id, tipo, datos = evento['tenant_id'], evento['tipo'], evento['datos']
     oportunidad = datos['oportunidad_id']
-    if control(tenant_id, oportunidad).get('perdida'):
+    estado = control(tenant_id, oportunidad)
+    if estado.get('cierre') or estado.get('perdida'):
         marcar_procesado(evento)
         return
     fecha = datetime.fromisoformat(fecha_utc(evento['fecha']).replace('Z', '+00:00'))
     programada = (fecha + timedelta(days=plazo(tipo))).strftime('%Y-%m-%dT%H:%M:%SZ')
-    titulos = {'oportunidad.etapa_cambiada': 'Seguimiento comercial',
-               'oportunidad.ganada': 'Iniciar servicio o entrega',
-               'cotizacion.enviada': 'Seguimiento de cotización'}
+    titulos = {'cotizacion.enviada': 'Seguimiento de cotización'}
     responsable = datos['creada_por'] if tipo == 'cotizacion.enviada' else datos['responsable_id']
     actividad_id = 'act_' + hashlib.sha256(f"{tenant_id}|{evento['evento_id']}".encode()).hexdigest()[:32]
     descripcion = f"Generada por {tipo} para {oportunidad}."
@@ -108,67 +100,62 @@ def crear_automatica(evento):
     item = nueva_actividad(tenant_id, actividad_id, 'tarea', titulos[tipo], descripcion,
         datos['cliente_id'], oportunidad, responsable, programada, 'automatica')
     item['evento_origen_id'] = evento['evento_id']
+    item['clase_automatica'] = 'seguimiento_cotizacion'
     try:
         cliente.transact_write_items(TransactItems=[
             put(os.environ['TABLE_ACTIVIDADES'], item, 'attribute_not_exists(actividad_id)'),
-            registro_procesado(evento), proteger_oportunidad(tenant_id, oportunidad)])
+            registro_procesado(evento), proteger_oportunidad(tenant_id, oportunidad, impedir_cierre=True)])
     except ClientError as error:
         if not es_condicional(error):
             raise
         if procesado(evento):
             return
-        if control(tenant_id, oportunidad).get('perdida'):
+        estado = control(tenant_id, oportunidad)
+        if estado.get('perdida') or estado.get('cierre'):
             marcar_procesado(evento)
             return
         raise  # Conflicto o estado inesperado: SQS reintentará, no confirmar prematuramente.
 
 
-def cancelar_pendientes(evento, context):
-    tenant_id, oportunidad = evento['tenant_id'], evento['datos']['oportunidad_id']
-    # Primero barrera durable. Todas las creaciones vinculadas escriben esta misma fila
-    # en transacción; después de esta escritura no pueden aparecer nuevas pendientes.
-    tabla_control = tabla('TABLE_OPORTUNIDADES_CONTROL')
-    resultado_control = tabla_control.update_item(
-        Key={'tenant_id': tenant_id, 'oportunidad_id': oportunidad},
-        UpdateExpression='SET perdida = :si, fecha_actualizacion = :fecha',
-        ExpressionAttributeValues={':si': True, ':fecha': ahora()}, ReturnValues='ALL_NEW')
-    consulta = {'KeyConditionExpression': Key('tenant_id').eq(tenant_id), 'ConsistentRead': True,
-                'FilterExpression': Attr('oportunidad_id').eq(oportunidad) & Attr('estado').eq('pendiente'),
-                'Limit': 100}
-    cursor = resultado_control['Attributes'].get('cursor_cancelacion')
-    if cursor:
-        consulta['ExclusiveStartKey'] = cursor
-    # Una lectura fuerte sobre la tabla evita omitir filas por propagación eventual del GSI.
-    while True:
-        resultado = tabla().query(**consulta)
-        for item in resultado.get('Items', []):
-            if context and context.get_remaining_time_in_millis() < 5000:
-                raise RuntimeError('Cancelación incompleta; reintentar')
-            try:
-                tabla().update_item(
-                    Key={k: item[k] for k in ('tenant_id', 'actividad_id')},
-                    UpdateExpression='SET #estado = :cancelada, fecha_actualizacion = :fecha ADD #version :uno',
-                    ConditionExpression='#estado = :pendiente',
-                    ExpressionAttributeNames={'#estado': 'estado', '#version': 'version'},
-                    ExpressionAttributeValues={':pendiente': 'pendiente', ':cancelada': 'cancelada',
-                                               ':fecha': ahora(), ':uno': 1})
-            except ClientError as error:
-                if error.response['Error']['Code'] != 'ConditionalCheckFailedException':
-                    raise
-        if not resultado.get('LastEvaluatedKey'):
-            break
-        # Solo guardar progreso tras terminar la página. Un fallo dentro de ella
-        # vuelve a recorrerla y las condiciones conservan lo ya completado.
-        tabla_control.update_item(
-            Key={'tenant_id': tenant_id, 'oportunidad_id': oportunidad},
-            UpdateExpression='SET cursor_cancelacion = :cursor',
-            ExpressionAttributeValues={':cursor': resultado['LastEvaluatedKey']})
-        if context and context.get_remaining_time_in_millis() < 5000:
-            raise RuntimeError('Cancelación incompleta; reintentar')
-        consulta['ExclusiveStartKey'] = resultado['LastEvaluatedKey']
-    # Solo confirmar tras recorrer todo. Si falla a mitad, el siguiente intento continúa
-    # cancelando únicamente lo pendiente; jamás modifica completadas/canceladas.
-    marcar_procesado(evento)
+def registrar_cancelacion(evento):
+    """Cierre, tarea de entrega y trabajo pendiente se registran juntos."""
+    tenant_id = evento['tenant_id']
+    datos = evento['datos']
+    oportunidad = datos['oportunidad_id']
+    ganada = evento['tipo'] == 'oportunidad.ganada'
+    expresion = 'SET cierre = :cierre, fecha_actualizacion = :fecha, cancelacion_estado = :pendiente, cancelacion_proxima = :fecha'
+    valores = {':cierre': 'ganada' if ganada else 'perdida', ':fecha': ahora(), ':pendiente': 'pendiente'}
+    if not ganada:
+        expresion += ', perdida = :si'
+        valores[':si'] = True
+    operacion = {'Update': {
+        'TableName': os.environ['TABLE_OPORTUNIDADES_CONTROL'],
+        'Key': serializar({'tenant_id': tenant_id, 'oportunidad_id': oportunidad}),
+        'UpdateExpression': expresion,
+        'ConditionExpression': 'attribute_not_exists(cierre) AND attribute_not_exists(perdida)',
+        'ExpressionAttributeValues': serializar(valores)}}
+    operaciones = [operacion, registro_procesado(evento)]
+    if ganada:
+        fecha = datetime.fromisoformat(fecha_utc(evento['fecha']).replace('Z', '+00:00'))
+        programada = (fecha + timedelta(days=plazo('oportunidad.ganada'))).strftime('%Y-%m-%dT%H:%M:%SZ')
+        actividad_id = 'act_' + hashlib.sha256(f"{tenant_id}|{evento['evento_id']}".encode()).hexdigest()[:32]
+        item = nueva_actividad(tenant_id, actividad_id, 'tarea', 'Iniciar servicio o entrega',
+            f'Generada por oportunidad.ganada para {oportunidad}.', datos['cliente_id'], oportunidad,
+            datos['responsable_id'], programada, 'automatica')
+        item.update(evento_origen_id=evento['evento_id'], clase_automatica='entrega')
+        operaciones.append(put(os.environ['TABLE_ACTIVIDADES'], item, 'attribute_not_exists(actividad_id)'))
+    try:
+        cliente.transact_write_items(TransactItems=operaciones)
+    except ClientError as error:
+        if not es_condicional(error):
+            raise
+        if procesado(evento):
+            return
+        estado = control(tenant_id, oportunidad)
+        if estado.get('cierre') == ('ganada' if ganada else 'perdida') or (not ganada and estado.get('perdida')):
+            marcar_procesado(evento)
+            return
+        raise
 
 
 def lambda_handler(event, context):
@@ -179,12 +166,11 @@ def lambda_handler(event, context):
             evento = leer_evento(registro)
             if procesado(evento):
                 continue
-            if evento['tipo'] == 'oportunidad.perdida':
-                cancelar_pendientes(evento, context)
+            if evento['tipo'] in ('oportunidad.perdida', 'oportunidad.ganada'):
+                registrar_cancelacion(evento)
             else:
                 crear_automatica(evento)
-        except Exception:
-            # No registrar datos comerciales, cuerpos o identidades.
-            print(f'Mensaje de Actividades pendiente de reintento: {mensaje_id}')
+        except Exception as error:
+            registrar_fallo('procesar_evento_actividades', error, mensaje_id)
             fallidos.append({'itemIdentifier': mensaje_id})
     return {'batchItemFailures': fallidos}

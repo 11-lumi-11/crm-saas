@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from src.utilidades import (
     ErrorNegocio, manejar_errores, respuesta, obtener_claims, leer_cotizacion, exigir_estado,
     esta_vencida, cambiar_estado, generar_id
@@ -20,7 +21,10 @@ def lambda_handler(event, context):
         'oportunidad_id': cotizacion['oportunidad_id'],
         'cliente_id': cotizacion['cliente_id'],
         'solicitud_id': solicitud_id
-    }, extra={'solicitud_aceptacion_id': solicitud_id, 'respondida_por': usuario_id,
+    }, campos_fecha=('fecha_solicitud_aceptacion',),
+       extra={'solicitud_aceptacion_id': solicitud_id, 'respondida_por': usuario_id,
+              'recuperacion_estado': 'pendiente',
+              'proximo_reintento': (datetime.now(timezone.utc) + timedelta(minutes=10)).strftime('%Y-%m-%dT%H:%M:%SZ'),
               'resultado_aceptacion': ''})
     return respuesta(202, {'mensaje': 'Aceptación pendiente de confirmación; consulte la cotización.',
                            'cotizacion_id': cotizacion_id, 'estado': 'aceptacion_pendiente',

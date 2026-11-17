@@ -7,7 +7,7 @@ from string import Formatter
 
 from botocore.exceptions import ClientError
 
-from crm_comun import ahora
+from crm_comun import ahora, registrar_fallo
 from src.utilidades import tabla, destino_usuario, destino_rol
 
 # Por tipo de evento: título, mensaje y destinos.
@@ -135,11 +135,10 @@ def guardar(aviso):
     try:
         tabla('TABLE_NOTIFICACIONES').put_item(
             Item=aviso, ConditionExpression='attribute_not_exists(notificacion_id)')
-        print(f"Aviso guardado: {aviso['notificacion_id']} -> {aviso['destino']}")
     except ClientError as e:
         if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
             # Reentrega del mismo evento: ya existe, no se duplica ni se reinicia
-            print(f"Aviso duplicado omitido: {aviso['notificacion_id']}")
+            pass
         else:
             raise
 
@@ -150,11 +149,10 @@ def lambda_handler(event, context):
         mensaje_id = registro['messageId']
         try:
             evento = leer_evento(registro)
-            print(f"Evento recibido: tipo={evento.get('tipo')} evento_id={evento.get('evento_id')} tenant={evento.get('tenant_id')}")
             for aviso in armar_notificaciones(evento):
                 guardar(aviso)
         except Exception as e:
             # JSON dañado o error de DynamoDB: se reintenta solo este mensaje (3 intentos y luego DLQ)
-            print(f'Error en mensaje {mensaje_id}: {e}')
+            registrar_fallo('procesar_notificacion', e, mensaje_id)
             fallidos.append({'itemIdentifier': mensaje_id})
     return {'batchItemFailures': fallidos}

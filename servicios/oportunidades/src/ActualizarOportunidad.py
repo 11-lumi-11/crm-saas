@@ -1,6 +1,6 @@
 from src.utilidades import (
     ErrorNegocio, manejar_errores, respuesta, leer_body, obtener_claims, ahora, tabla, dynamodb,
-    leer_oportunidad, validar_texto, validar_monto, validar_probabilidad, validar_moneda,
+    leer_oportunidad, validar_texto, validar_monto, validar_moneda,
     validar_fecha_cierre, validar_responsable, ETAPAS_CERRADAS
 )
 
@@ -8,12 +8,11 @@ VALIDADORES = {
     'titulo': lambda v: validar_texto(v, 'titulo'),
     'monto_estimado': validar_monto,
     'moneda': validar_moneda,
-    'probabilidad': validar_probabilidad,
     'fecha_cierre_estimada': validar_fecha_cierre,
     'responsable_id': validar_responsable,
     'cliente_nombre': lambda v: validar_texto(v, 'cliente_nombre')
 }
-NO_EDITABLES = ('etapa', 'cliente_id')
+NO_EDITABLES = ('etapa', 'cliente_id', 'probabilidad')
 
 
 @manejar_errores

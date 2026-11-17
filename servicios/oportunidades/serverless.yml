@@ -104,18 +104,9 @@ functions:
           authorizer:
             name: authorizerJwt
 
-  eliminarOportunidad:
-    handler: src/EliminarOportunidad.lambda_handler
-    events:
-      - httpApi:
-          path: /oportunidades/{oportunidad_id}
-          method: delete
-          authorizer:
-            name: authorizerJwt
-
-  # Consumidor SQS: evento cotizacion.aceptada -> oportunidad ganada
-  procesarCotizacionAceptada:
-    handler: src/ProcesarCotizacionAceptada.lambda_handler
+  # La cotización enviada inicia la negociación; la aceptación tiene su propio protocolo.
+  procesarCotizacionEnviada:
+    handler: src/ProcesarCotizacionEnviada.lambda_handler
     events:
       - sqs:
           arn: !GetAtt ColaCotizacionAceptada.Arn
@@ -143,6 +134,21 @@ resources:
       Type: AWS::SQS::Queue
       Properties:
         MessageRetentionPeriod: 1209600
+    AlarmaSolicitudAceptacionDLQ:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmDescription: Mensajes de solicitud de aceptación pendientes de revisión en la DLQ
+        Namespace: AWS/SQS
+        MetricName: ApproximateNumberOfMessagesVisible
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt ColaSolicitudAceptacionDLQ.QueueName
+        Statistic: Maximum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
     ColaSolicitudAceptacion:
       Type: AWS::SQS::Queue
       Properties:
@@ -319,7 +325,7 @@ resources:
         RawMessageDelivery: false
         FilterPolicy:
           tipo:
-            - cotizacion.aceptada
+            - cotizacion.enviada
 
 package:
   patterns:

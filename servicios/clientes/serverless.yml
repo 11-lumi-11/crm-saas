@@ -27,11 +27,19 @@ provider:
   environment:
     TABLE_CLIENTES: ${sls:stage}-t_clientes
     TABLE_CONTACTOS: ${sls:stage}-t_contactos
+    TABLE_VENTAS_RECIBIDAS: ${sls:stage}-t_ventas_recibidas_clientes
     INDEX_CLIENTE: cliente_id-index
     TABLE_EVENTOS: ${sls:stage}-t_eventos_clientes
     SNS_TOPIC_ARN: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
 
 functions:
+  prepararCorreoVenta:
+    handler: src/PrepararCorreoVenta.lambda_handler
+    events:
+      - sqs:
+          arn: !GetAtt ColaVentasCorreo.Arn
+          batchSize: 10
+          functionResponseType: ReportBatchItemFailures
   publicarEventos:
     handler: crm_comun.eventos.lambda_handler
     timeout: 60
@@ -75,15 +83,6 @@ functions:
           authorizer:
             name: authorizerJwt
 
-  eliminarCliente:
-    handler: src/EliminarCliente.lambda_handler
-    events:
-      - httpApi:
-          path: /clientes/{cliente_id}
-          method: delete
-          authorizer:
-            name: authorizerJwt
-
   crearContacto:
     handler: src/CrearContacto.lambda_handler
     events:
@@ -104,6 +103,52 @@ functions:
 
 resources:
   Resources:
+    TablaVentasRecibidas:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_VENTAS_RECIBIDAS}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - {AttributeName: tenant_id, AttributeType: S}
+          - {AttributeName: evento_id, AttributeType: S}
+        KeySchema:
+          - {AttributeName: tenant_id, KeyType: HASH}
+          - {AttributeName: evento_id, KeyType: RANGE}
+    ColaVentasCorreoDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        MessageRetentionPeriod: 1209600
+    ColaVentasCorreo:
+      Type: AWS::SQS::Queue
+      Properties:
+        VisibilityTimeout: 120
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ColaVentasCorreoDLQ.Arn
+          maxReceiveCount: 5
+    PoliticaVentasCorreo:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues: [!Ref ColaVentasCorreo]
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal: {Service: sns.amazonaws.com}
+              Action: sqs:SendMessage
+              Resource: !GetAtt ColaVentasCorreo.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
+    SuscripcionVentasCorreo:
+      Type: AWS::SNS::Subscription
+      DependsOn: PoliticaVentasCorreo
+      Properties:
+        TopicArn: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
+        Protocol: sqs
+        Endpoint: !GetAtt ColaVentasCorreo.Arn
+        RawMessageDelivery: false
+        FilterPolicy:
+          tipo: [cotizacion.aceptada]
     TablaEventos:
       Type: AWS::DynamoDB::Table
       Properties:

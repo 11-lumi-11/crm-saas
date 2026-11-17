@@ -12,14 +12,8 @@ from crm_comun import (
 )
 from crm_comun.eventos import confirmar, put, evento_pendiente
 
-ETAPAS = ('nueva', 'calificada', 'propuesta', 'en_negociacion', 'ganada', 'perdida')
+ETAPAS = ('nueva', 'en_negociacion', 'ganada', 'perdida')
 ETAPAS_CERRADAS = ('ganada', 'perdida')
-# 'ganada' y 'perdida' comparten el nivel final; 'perdida' se valida aparte
-ORDEN = {'nueva': 0, 'calificada': 1, 'propuesta': 2, 'en_negociacion': 3, 'ganada': 4, 'perdida': 4}
-PROBABILIDAD_ETAPA = {
-    'nueva': 10, 'calificada': 25, 'propuesta': 50,
-    'en_negociacion': 75, 'ganada': 100, 'perdida': 0
-}
 MONEDAS = ('PEN', 'USD')
 MONTO_MAXIMO = 10 ** 12
 
@@ -46,10 +40,6 @@ def validar_monto(valor):
     return validar_numero(valor, 'monto_estimado', 0, MONTO_MAXIMO)
 
 
-def validar_probabilidad(valor):
-    return validar_numero(valor, 'probabilidad', 0, 100)
-
-
 def validar_moneda(valor):
     if not isinstance(valor, str) or valor.strip().upper() not in MONEDAS:
         raise ErrorNegocio(400, 'datos_invalidos', 'moneda debe ser PEN o USD')
@@ -73,7 +63,7 @@ def tabla(variable_entorno):
 
 def leer_oportunidad(tenant_id, oportunidad_id):
     item = tabla('TABLE_OPORTUNIDADES').get_item(
-        Key={'tenant_id': tenant_id, 'oportunidad_id': oportunidad_id}
+        Key={'tenant_id': tenant_id, 'oportunidad_id': oportunidad_id}, ConsistentRead=True
     ).get('Item')
     if not item or item.get('eliminado'):
         raise ErrorNegocio(404, 'no_encontrado', 'La oportunidad no existe')
@@ -96,14 +86,14 @@ def cambiar_etapa(tenant_id, oportunidad_id, etapa_nueva, motivo_perdida, usuari
         if not isinstance(motivo_perdida, str) or not motivo_perdida.strip():
             raise ErrorNegocio(400, 'motivo_requerido', 'Indique el motivo de la pérdida')
         motivo_perdida = motivo_perdida.strip()
-    elif ORDEN[etapa_nueva] <= ORDEN[etapa_actual]:
-        raise ErrorNegocio(400, 'transicion_invalida', 'Solo se puede avanzar a una etapa posterior')
-
-    probabilidad = PROBABILIDAD_ETAPA[etapa_nueva]
+    elif etapa_nueva == 'en_negociacion' and etapa_actual != 'nueva':
+        raise ErrorNegocio(400, 'transicion_invalida', 'La oportunidad ya está en negociación')
+    elif etapa_nueva not in ('en_negociacion', 'ganada'):
+        raise ErrorNegocio(400, 'transicion_invalida', 'Transición no permitida')
     fecha = ahora()
 
-    expresion = 'SET #etapa = :nueva, probabilidad = :prob, fecha_actualizacion = :fecha'
-    valores = {':nueva': etapa_nueva, ':prob': probabilidad, ':fecha': fecha, ':actual': etapa_actual}
+    expresion = 'SET #etapa = :nueva, fecha_actualizacion = :fecha'
+    valores = {':nueva': etapa_nueva, ':fecha': fecha, ':actual': etapa_actual}
     if etapa_nueva == 'perdida':
         expresion += ', motivo_perdida = :motivo'
         valores[':motivo'] = motivo_perdida
@@ -175,7 +165,7 @@ def cambiar_etapa(tenant_id, oportunidad_id, etapa_nueva, motivo_perdida, usuari
             raise ErrorNegocio(409, 'conflicto_etapa', 'La oportunidad cambió de etapa mientras se procesaba; reintente')
         raise
 
-    oportunidad.update({'etapa': etapa_nueva, 'probabilidad': Decimal(probabilidad), 'fecha_actualizacion': fecha})
+    oportunidad.update({'etapa': etapa_nueva, 'fecha_actualizacion': fecha})
     if etapa_nueva == 'perdida':
         oportunidad['motivo_perdida'] = motivo_perdida
     return oportunidad

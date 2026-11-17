@@ -1,6 +1,6 @@
-from crm_comun import ahora, generar_id, validar_texto
+from crm_comun import ahora, generar_id, validar_texto, validar_correo
 from botocore.exceptions import ClientError
-from crm_comun.eventos import put, serializar
+from crm_comun.eventos import put, serializar, evento_pendiente
 from crm_comun import respuesta, leer_body, claims, manejar_errores, ErrorNegocio
 import boto3
 import os
@@ -31,6 +31,7 @@ def lambda_handler(event, context):
     for campo in ('cargo', 'correo', 'telefono'):
         if campo in body and not isinstance(body[campo], str):
             raise ErrorNegocio(400, 'datos_invalidos', f'{campo} debe ser texto')
+    correo = validar_correo(body['correo']) if body.get('correo', '').strip() else ''
 
     item = {
         'tenant_id': tenant_id,
@@ -38,7 +39,7 @@ def lambda_handler(event, context):
         'cliente_id': cliente_id,
         'nombre': nombre,
         'cargo': body.get('cargo', ''),
-        'correo': (body.get('correo') or '').strip().lower(),
+        'correo': correo,
         'telefono': body.get('telefono', ''),
         'es_principal': es_principal,
         'fecha_creacion': fecha
@@ -56,8 +57,11 @@ def lambda_handler(event, context):
         operacion['UpdateExpression'] += ', contacto_principal_id = :contacto'
         operacion['ExpressionAttributeValues'][':contacto'] = {'S': contacto_id}
     try:
-        boto3.client('dynamodb').transact_write_items(TransactItems=[
-            {'Update': operacion}, put(os.environ['TABLE_CONTACTOS'], item, 'attribute_not_exists(contacto_id)')])
+        operaciones = [{'Update': operacion}, put(os.environ['TABLE_CONTACTOS'], item, 'attribute_not_exists(contacto_id)')]
+        if es_principal:
+            operaciones.append(evento_pendiente('cliente.contacto_principal_creado', tenant_id,
+                {'cliente_id': cliente_id, 'contacto_id': contacto_id, 'correo': item['correo']}))
+        boto3.client('dynamodb').transact_write_items(TransactItems=operaciones)
     except ClientError as error:
         razones = error.response.get('CancellationReasons', [])
         if (error.response['Error']['Code'] == 'TransactionCanceledException' and razones

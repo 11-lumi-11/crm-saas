@@ -3,7 +3,7 @@ import json
 import os
 import re
 
-from crm_comun import ahora
+from crm_comun import ahora, registrar_fallo
 from crm_comun.eventos import evento_pendiente, put, serializar
 from src.utilidades import dynamodb, dynamodb_cliente, cambiar_etapa
 
@@ -21,7 +21,12 @@ def procesar(evento):
             raise ValueError('Identificador inválido')
     tabla_decisiones = dynamodb.Table(os.environ['TABLE_SOLICITUDES'])
     clave = {'tenant_id': tenant, 'solicitud_id': solicitud}
-    if tabla_decisiones.get_item(Key=clave, ConsistentRead=True).get('Item'):
+    decision = tabla_decisiones.get_item(Key=clave, ConsistentRead=True).get('Item')
+    if decision:
+        if decision.get('datos_solicitud') != datos:
+            raise ValueError('Solicitud repetida con datos distintos o sin decisión recuperable')
+        dynamodb_cliente.transact_write_items(TransactItems=[evento_pendiente(
+            decision['resultado'], tenant, {**datos, 'motivo': decision['motivo']})])
         return
     oportunidad = dynamodb.Table(os.environ['TABLE_OPORTUNIDADES']).get_item(
         Key={'tenant_id': tenant, 'oportunidad_id': datos['oportunidad_id']}, ConsistentRead=True).get('Item')
@@ -38,6 +43,7 @@ def procesar(evento):
     tipo = 'oportunidad.aceptacion_rechazada' if motivo else 'oportunidad.aceptacion_confirmada'
     respuesta = {**datos, 'motivo': motivo or ''}
     adicionales = [put(os.environ['TABLE_SOLICITUDES'], {**clave, 'resultado': tipo,
+                    'datos_solicitud': datos, 'motivo': motivo or '',
                     'fecha_creacion': ahora()}, 'attribute_not_exists(solicitud_id)'),
                    evento_pendiente(tipo, tenant, respuesta)]
     if motivo:
@@ -62,6 +68,7 @@ def lambda_handler(event, context):
         try:
             sobre = json.loads(registro['body'])
             procesar(json.loads(sobre['Message']))
-        except Exception:
+        except Exception as error:
+            registrar_fallo('procesar_solicitud_aceptacion', error, registro.get('messageId'))
             fallidos.append({'itemIdentifier': registro['messageId']})
     return {'batchItemFailures': fallidos}

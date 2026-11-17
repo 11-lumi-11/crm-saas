@@ -28,8 +28,20 @@ provider:
     TABLE_NOTIFICACIONES: ${sls:stage}-t_notificaciones
     TABLE_LECTURAS: ${sls:stage}-t_lecturas_notificaciones
     INDEX_DESTINO: destino-index
+    TABLE_CORREOS_VENTA: ${sls:stage}-t_correos_venta
+    STAGE: ${sls:stage}
 
 functions:
+
+  correosVenta:
+    handler: src/CorreosVenta.lambda_handler
+    timeout: 60
+    reservedConcurrency: 1
+    events:
+      - sqs:
+          arn: !GetAtt ColaCorreosVenta.Arn
+          batchSize: 1
+          functionResponseType: ReportBatchItemFailures
 
   # Consumidor SQS: convierte cada evento del catálogo en uno o más avisos
   procesarEventos:
@@ -60,6 +72,61 @@ functions:
 
 resources:
   Resources:
+
+    TablaCorreosVenta:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_CORREOS_VENTA}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: tenant_id
+            AttributeType: S
+          - AttributeName: clave
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenant_id
+            KeyType: HASH
+          - AttributeName: clave
+            KeyType: RANGE
+
+    ColaCorreosVentaDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        MessageRetentionPeriod: 1209600
+
+    ColaCorreosVenta:
+      Type: AWS::SQS::Queue
+      Properties:
+        VisibilityTimeout: 360
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ColaCorreosVentaDLQ.Arn
+          maxReceiveCount: 5
+
+    PoliticaColaCorreosVenta:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues: [!Ref ColaCorreosVenta]
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal: {Service: sns.amazonaws.com}
+              Action: sqs:SendMessage
+              Resource: !GetAtt ColaCorreosVenta.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
+
+    SuscripcionCorreosVenta:
+      Type: AWS::SNS::Subscription
+      DependsOn: PoliticaColaCorreosVenta
+      Properties:
+        TopicArn: ${cf:crm-compartido-${sls:stage}.EventosTopicArn}
+        Protocol: sqs
+        Endpoint: !GetAtt ColaCorreosVenta.Arn
+        RawMessageDelivery: false
+        FilterPolicy:
+          tipo: [cliente.correo_actualizado, cliente.contacto_principal_creado, venta.destinatarios]
 
     # Un aviso por evento y destino (usuario concreto o rol del tenant)
     TablaNotificaciones:

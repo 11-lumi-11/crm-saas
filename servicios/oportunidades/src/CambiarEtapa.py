@@ -12,6 +12,9 @@ def lambda_handler(event, context):
     if body.get('etapa') is None:
         raise ErrorNegocio(400, 'datos_incompletos', 'Indique la etapa')
 
+    if body['etapa'] != 'perdida':
+        raise ErrorNegocio(400, 'transicion_invalida', 'Solo se puede marcar perdida manualmente')
+
     oportunidad = cambiar_etapa(
         tenant_id, oportunidad_id, body['etapa'], body.get('motivo_perdida'), usuario_id
     )

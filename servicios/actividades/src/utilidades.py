@@ -96,13 +96,13 @@ def control(tenant_id, oportunidad_id):
         Key={'tenant_id': tenant_id, 'oportunidad_id': oportunidad_id}, ConsistentRead=True).get('Item', {})
 
 
-def proteger_oportunidad(tenant_id, oportunidad_id):
+def proteger_oportunidad(tenant_id, oportunidad_id, impedir_cierre=False):
     """Escritura común para serializar creaciones con el cierre por pérdida."""
     return {'Update': {
         'TableName': os.environ['TABLE_OPORTUNIDADES_CONTROL'],
         'Key': serializar({'tenant_id': tenant_id, 'oportunidad_id': oportunidad_id}),
         'UpdateExpression': 'SET fecha_actualizacion = :fecha ADD revision :uno',
-        'ConditionExpression': 'attribute_not_exists(perdida)',
+        'ConditionExpression': 'attribute_not_exists(perdida)' + (' AND attribute_not_exists(cierre)' if impedir_cierre else ''),
         'ExpressionAttributeValues': serializar({':fecha': ahora(), ':uno': 1})}}
 
 

@@ -1,5 +1,5 @@
-from crm_comun import ahora, generar_id, validar_texto
-from crm_comun.eventos import confirmar, put
+from crm_comun import ahora, generar_id, validar_texto, validar_correo
+from crm_comun.eventos import confirmar, put, evento_pendiente
 from crm_comun import respuesta, leer_body, claims, manejar_errores, ErrorNegocio, validar_responsable
 import os
 
@@ -36,6 +36,7 @@ def lambda_handler(event, context):
     for campo in ('documento', 'correo', 'telefono', 'industria', 'ciudad'):
         if campo in body and not isinstance(body[campo], str):
             raise ErrorNegocio(400, 'datos_invalidos', f'{campo} debe ser texto')
+    correo = validar_correo(body['correo']) if body.get('correo', '').strip() else ''
 
     fecha = ahora()
     cliente_id = generar_id('cli')
@@ -46,7 +47,8 @@ def lambda_handler(event, context):
         'nombre': nombre,
         'tipo': tipo,
         'documento': body.get('documento', ''),
-        'correo': (body.get('correo') or '').strip().lower(),
+        'correo': correo,
+        'revision_correo': 1,
         'telefono': body.get('telefono', ''),
         'industria': body.get('industria', ''),
         'ciudad': body.get('ciudad', ''),
@@ -56,7 +58,9 @@ def lambda_handler(event, context):
         'fecha_actualizacion': fecha
     }
 
-    confirmar([put(os.environ['TABLE_CLIENTES'], item, 'attribute_not_exists(cliente_id)')],
+    confirmar([put(os.environ['TABLE_CLIENTES'], item, 'attribute_not_exists(cliente_id)'),
+               evento_pendiente('cliente.correo_actualizado', tenant_id,
+                   {'cliente_id': cliente_id, 'correo': item['correo'], 'revision': 1})],
               'cliente.creado', tenant_id,
               {'cliente_id': cliente_id, 'nombre': nombre, 'responsable_id': responsable_id})
 

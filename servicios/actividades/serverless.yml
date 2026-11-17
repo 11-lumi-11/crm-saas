@@ -39,6 +39,12 @@ provider:
     DIAS_SEGUIMIENTO_COTIZACION: '${env:DIAS_SEGUIMIENTO_COTIZACION, "3"}'
 
 functions:
+  continuarCancelaciones:
+    handler: src/ContinuarCancelaciones.lambda_handler
+    timeout: 60
+    reservedConcurrency: 1
+    events:
+      - schedule: rate(1 minute)
   publicarEventos:
     handler: crm_comun.eventos.lambda_handler
     timeout: 60
@@ -213,11 +219,24 @@ resources:
             AttributeType: S
           - AttributeName: oportunidad_id
             AttributeType: S
+          - AttributeName: cancelacion_estado
+            AttributeType: S
+          - AttributeName: cancelacion_proxima
+            AttributeType: S
         KeySchema:
           - AttributeName: tenant_id
             KeyType: HASH
           - AttributeName: oportunidad_id
             KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: cancelaciones-pendientes-index
+            KeySchema:
+              - AttributeName: cancelacion_estado
+                KeyType: HASH
+              - AttributeName: cancelacion_proxima
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
 
     ColaActividadesDLQ:
       Type: AWS::SQS::Queue
@@ -264,7 +283,6 @@ resources:
         RawMessageDelivery: false
         FilterPolicy:
           tipo:
-            - oportunidad.etapa_cambiada
             - oportunidad.ganada
             - oportunidad.perdida
             - cotizacion.enviada

@@ -54,18 +54,17 @@ Los GSI de actividades usan `tenant_id` con `responsable_id`, `estado`, `oportun
 
 | Evento recibido | Acción |
 |---|---|
-| oportunidad.etapa_cambiada | Crear seguimiento comercial |
-| oportunidad.ganada | Crear tarea de inicio o entrega |
+| oportunidad.ganada | Crear tarea de entrega y cancelar seguimientos pendientes |
 | oportunidad.perdida | Cancelar pendientes de la oportunidad dentro del tenant |
 | cotizacion.enviada | Crear seguimiento asignado a creada_por |
 
 `ProcesarEventosActividades` consume una cola SQS propia, suscrita al topic SNS compartido con filtro por tipo y sobre SNS. Incluye DLQ y manejo de errores parciales por lote.
 
-Los eventos se deduplican por tenant e identificador. Una pérdida establece una barrera persistente que impide crear pendientes por eventos tardíos. La cancelación es paginada, conserva progreso y respeta actividades completadas.
+Los eventos se deduplican por tenant e identificador. Una oportunidad ganada o perdida establece una barrera que impide crear seguimientos por eventos tardíos. En ganadas se cancelan solo seguimientos de cotización y se conserva la tarea de entrega; en perdidas se cancelan todas las actividades pendientes. La cancelación es paginada, conserva progreso y respeta actividades completadas.
 
-**Pendiente para volúmenes grandes:** la cancelación lee las actividades del tenant en páginas. Si no termina en los tres intentos de la cola, el mensaje pasa a la DLQ y pueden quedar actividades pendientes. Esto depende del volumen almacenado, incluso si los datos se cargaron directamente con Python. Para la demo, comprobar en AWS que se cancelen las actividades de una oportunidad perdida y revisar la DLQ si no ocurre. El cursor guardado permite continuar el recorrido al reprocesar el mensaje; verificar el resultado antes de darlo por resuelto.
+**Continuación automática:** el consumidor registra de forma transaccional la barrera, el trabajo pendiente y la deduplicación. Una Lambda programada cada minuto busca trabajos pendientes mediante un índice de la tabla de control y recorre la tabla de Actividades con lectura consistente, hasta diez páginas por trabajo en cada ejecución. Guarda el cursor después de cada página y continúa en ejecuciones posteriores. Si falla a mitad de página, la repite; solo cambia actividades que sigan pendientes. La concurrencia reservada de la Lambda es 1.
 
-**Solución propuesta:** convertir la cancelación en un trabajo por lotes con una continuación durable: guardar el progreso y asegurar que exista una siguiente ejecución hasta completar el recorrido, reservando la DLQ para fallos reales. La solución debe conservar la barrera ante eventos tardíos, admitir mensajes duplicados y probarse con volumen y concurrencia. Un índice por oportunidad puede reducir lecturas, pero su consistencia eventual debe considerarse antes de reemplazar el recorrido actual de lectura consistente. Aumentar los reintentos o el tiempo solo mitigaría el problema, sin eliminarlo.
+El índice sirve para descubrir trabajos, no para buscar actividades: su demora puede retrasar el inicio, pero no omite actividades del recorrido. La cancelación puede tardar según el volumen; errores persistentes aparecen en los logs y en la métrica de errores de Lambda. Si el evento no llega a registrar el trabajo, depende de los reintentos SQS y la DLQ. Falta verificar el flujo y los permisos en AWS con volumen real. Se asume una base vacía; los controles de pérdidas anteriores no se migran.
 
 Al completar se guardan el cambio y `actividad.completada` en una transacción. El evento contiene `actividad_id`, `oportunidad_id` (vacío si no aplica) y `responsable_id` de la actividad, destinatario utilizado por Notificaciones.
 

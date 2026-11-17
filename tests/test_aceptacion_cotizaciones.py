@@ -62,10 +62,38 @@ class Aceptacion(unittest.TestCase):
     def test_solicitud_repetida_no_decide_otra_vez(self):
         m = modulo('oportunidades', 'ProcesarSolicitudAceptacion')
         tabla = MagicMock()
-        tabla.get_item.return_value = {'Item': {'resultado': 'confirmada'}}
-        with patch.object(m.dynamodb, 'Table', return_value=tabla), patch.object(m, 'cambiar_etapa') as cambio:
+        tabla.get_item.return_value = {'Item': {'resultado': 'oportunidad.aceptacion_confirmada',
+                                               'datos_solicitud': self.datos, 'motivo': ''}}
+        cliente = MagicMock()
+        with patch.object(m.dynamodb, 'Table', return_value=tabla), patch.object(m, 'cambiar_etapa') as cambio, \
+             patch.object(m, 'dynamodb_cliente', cliente):
             m.procesar(self.evento)
         cambio.assert_not_called()
+        evento = cliente.transact_write_items.call_args.kwargs['TransactItems'][0]['Put']['Item']['evento']['M']
+        self.assertEqual(evento['tipo']['S'], 'oportunidad.aceptacion_confirmada')
+        self.assertEqual(evento['datos']['M']['cotizacion_id']['S'], 'cot_1')
+
+    def test_solicitud_repetida_con_datos_distintos_se_rechaza(self):
+        m = modulo('oportunidades', 'ProcesarSolicitudAceptacion')
+        tabla = MagicMock()
+        tabla.get_item.return_value = {'Item': {'datos_solicitud': {**self.datos, 'cotizacion_id': 'cot_2'}}}
+        with patch.object(m.dynamodb, 'Table', return_value=tabla), self.assertRaises(ValueError):
+            m.procesar(self.evento)
+
+    def test_recuperacion_reenvia_misma_solicitud_condicionalmente(self):
+        m = modulo('productos_cotizaciones', 'RecuperarAceptaciones')
+        tabla, cliente = MagicMock(), MagicMock()
+        tabla.query.return_value = {'Items': [{'tenant_id': 'ten_1', **self.datos,
+            'solicitud_aceptacion_id': 'sol_1', 'proximo_reintento': '2020-01-01T00:00:00Z'}]}
+        with patch.object(m.boto3, 'resource') as recurso, patch.object(m.boto3, 'client', return_value=cliente):
+            recurso.return_value.Table.return_value = tabla
+            resultado = m.lambda_handler({}, None)
+        self.assertEqual(resultado['reenviadas'], 1)
+        operaciones = cliente.transact_write_items.call_args.kwargs['TransactItems']
+        datos = operaciones[1]['Put']['Item']['evento']['M']['datos']['M']
+        self.assertEqual(datos['solicitud_id']['S'], 'sol_1')
+        self.assertEqual(datos['cotizacion_id']['S'], 'cot_1')
+        self.assertIn('solicitud_aceptacion_id = :solicitud', operaciones[0]['Update']['ConditionExpression'])
 
     def test_resultado_rechazado_deja_mensaje_y_no_publica_aceptacion(self):
         m = modulo('productos_cotizaciones', 'ProcesarResultadoAceptacion')

@@ -2,7 +2,7 @@
 import json
 import os
 
-from crm_comun import ahora
+from crm_comun import ahora, registrar_fallo
 from crm_comun.eventos import evento_pendiente, serializar
 from src.utilidades import dynamodb_cliente, tabla
 
@@ -27,13 +27,15 @@ def procesar(evento):
     operaciones = [{'Update': {'TableName': os.environ['TABLE_COTIZACIONES'], 'Key': serializar(clave),
         'UpdateExpression': 'SET #estado = :nuevo, fecha_actualizacion = :fecha, fecha_resultado_aceptacion = :fecha, '
                             'resultado_solicitud_id = :solicitud, resultado_aceptacion = :motivo'
-                            + (', fecha_respuesta = :fecha' if confirmado else ''),
+                            + (', fecha_respuesta = :fecha' if confirmado else '')
+                            + ' REMOVE recuperacion_estado, proximo_reintento',
         'ConditionExpression': '#estado = :pendiente AND solicitud_aceptacion_id = :solicitud',
         'ExpressionAttributeNames': {'#estado': 'estado'}, 'ExpressionAttributeValues': serializar(valores)}}]
     if confirmado:
         operaciones.append(evento_pendiente('cotizacion.aceptada', tenant, {
             'cotizacion_id': clave['cotizacion_id'], 'oportunidad_id': cotizacion['oportunidad_id'],
-            'cliente_id': cotizacion['cliente_id'], 'total': cotizacion['total']}))
+            'cliente_id': cotizacion['cliente_id'], 'total': cotizacion['total'],
+            'moneda': cotizacion.get('moneda', 'PEN')}))
     dynamodb_cliente.transact_write_items(TransactItems=operaciones)
 
 
@@ -42,6 +44,7 @@ def lambda_handler(event, context):
     for registro in event.get('Records', []):
         try:
             procesar(json.loads(json.loads(registro['body'])['Message']))
-        except Exception:
+        except Exception as error:
+            registrar_fallo('procesar_resultado_aceptacion', error, registro.get('messageId'))
             fallidos.append({'itemIdentifier': registro['messageId']})
     return {'batchItemFailures': fallidos}
