@@ -13,7 +13,7 @@ Importa `CRM-SaaS-flujos-principales.postman_collection.json` en Postman. Es una
 ## Flujos incluidos
 
 1. **Preparación:** registrar empresa y administrador, crear e iniciar sesión como gerente, crear cliente y comprobar el aviso generado por `cliente.creado`.
-2. **Venta exitosa:** crear oportunidad, avanzar de etapa y comprobar el seguimiento automático; crear producto y cotización, enviarla, verificar su seguimiento, solicitar la aceptación y comprobar oportunidad ganada y aviso para el gerente. El aviso se puede marcar como leído.
+2. **Venta exitosa:** crear oportunidad, producto y cotización, enviarla, comprobar la negociación y el seguimiento automático, solicitar la aceptación y comprobar oportunidad ganada y aviso para el gerente. El aviso se puede marcar como leído.
 3. **Venta perdida:** crear otra oportunidad y una actividad, enviar una cotización, marcar la oportunidad como perdida y comprobar que la actividad se cancela. Después se solicita aceptar la cotización y se comprueba que vuelve a `enviada` con el motivo de rechazo y que la oportunidad sigue perdida.
 
 La carpeta 3 necesita el cliente de la carpeta 1 y el producto creado en el paso 2.4.

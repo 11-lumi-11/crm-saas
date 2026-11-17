@@ -418,19 +418,6 @@
           }
         },
         {
-          "name": "Eliminar cliente (vendedor, debe 403)",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token_vendedor}}"
-              }
-            ],
-            "url": "{{clientes_url}}/clientes/{{cliente_id}}"
-          }
-        },
-        {
           "name": "Reasignar responsable (gerente, 200)",
           "request": {
             "method": "PUT",
@@ -469,19 +456,6 @@
               }
             ],
             "url": "{{clientes_url}}/clientes"
-          }
-        },
-        {
-          "name": "Eliminar cliente (gerente, 200)",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token_gerente}}"
-              }
-            ],
-            "url": "{{clientes_url}}/clientes/{{cliente_id}}"
           }
         }
       ]
@@ -612,7 +586,7 @@
             "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"monto_estimado\": 95000,\n  \"probabilidad\": 30\n}"
+              "raw": "{\n  \"monto_estimado\": 95000\n}"
             }
           },
           "event": [
@@ -655,38 +629,6 @@
                 "exec": [
                   "pm.test('Estado 403', () => pm.response.to.have.status(403));",
                   "pm.test('codigo prohibido', () => pm.expect(pm.response.json().codigo).to.eql('prohibido'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Cambiar etapa a calificada (200)",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token_vendedor}}"
-              }
-            ],
-            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}/etapa",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"etapa\": \"calificada\"\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
                 ]
               }
             }
@@ -783,7 +725,7 @@
           ]
         },
         {
-          "name": "Pasar a ganada (gerente, 200)",
+          "name": "Pasar a perdida con motivo (200)",
           "request": {
             "method": "PUT",
             "header": [
@@ -799,7 +741,7 @@
             "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}/etapa",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"etapa\": \"ganada\"\n}"
+              "raw": "{\n  \"etapa\": \"perdida\",\n  \"motivo_perdida\": \"Sin acuerdo\"\n}"
             }
           },
           "event": [
@@ -842,55 +784,6 @@
                 "exec": [
                   "pm.test('Estado 409', () => pm.response.to.have.status(409));",
                   "pm.test('codigo oportunidad_cerrada', () => pm.expect(pm.response.json().codigo).to.eql('oportunidad_cerrada'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Eliminar oportunidad (vendedor, debe 403)",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token_vendedor}}"
-              }
-            ],
-            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Estado 403', () => pm.response.to.have.status(403));",
-                  "pm.test('codigo prohibido', () => pm.expect(pm.response.json().codigo).to.eql('prohibido'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Eliminar oportunidad (gerente, 200)",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token_gerente}}"
-              }
-            ],
-            "url": "{{oportunidades_url}}/oportunidades/{{oportunidad_id}}"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
                 ]
               }
             }
