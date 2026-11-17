@@ -1,0 +1,36 @@
+org: percycastro
+app: crm-saas
+frameworkVersion: '4'
+service: crm-frontend-hosting
+
+provider:
+  name: aws
+  region: us-east-1
+
+# La aplicación se publica manualmente desde dist/; no enlaza ni modifica Git.
+resources:
+  Resources:
+    FrontendAmplify:
+      Type: AWS::Amplify::App
+      Properties:
+        Name: crm-frontend-${sls:stage}
+        Description: Frontend estatico del CRM SaaS
+        Platform: WEB
+        CustomRules:
+          - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>'
+            Target: /index.html
+            Status: '200'
+    FrontendBranch:
+      Type: AWS::Amplify::Branch
+      Properties:
+        AppId: !GetAtt FrontendAmplify.AppId
+        BranchName: ${sls:stage}
+        Stage: DEVELOPMENT
+        EnableAutoBuild: false
+  Outputs:
+    FrontendAppId:
+      Value: !GetAtt FrontendAmplify.AppId
+    FrontendDomain:
+      Value: !GetAtt FrontendAmplify.DefaultDomain
+    FrontendBranchName:
+      Value: ${sls:stage}
