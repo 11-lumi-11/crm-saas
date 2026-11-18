@@ -1,3 +1,5 @@
+import { BotonActualizar } from '../ui'
+import { useCacheVista, invalidarVistas } from '../cacheVistas'
 import { useEffect, useState } from 'react'
 import { productosApi } from '../productosApi'
 import { useCrm, soles } from '../store'
@@ -39,7 +41,7 @@ function ProductoForm({ producto, onClose, onGuardado }) {
   </Modal>
 }
 
-export default function Productos() {
+export default function Productos({ activa }) {
   const { esVend } = useCrm()
   const [productos, setProductos] = useState([])
   const [siguiente, setSiguiente] = useState(null)
@@ -49,12 +51,13 @@ export default function Productos() {
   const [error, setError] = useState('')
   const [modal, setModal] = useState(null)
   const cargar = async () => {
-    setCargando(true); setError('')
-    try { const datos = await productosApi.listar(); setProductos(datos.productos); setSiguiente(datos.siguiente) }
+    const carga = cache.iniciarCarga()
+    if (!cache.estado.current.cargada) setCargando(true); setError('')
+    try { const datos = await productosApi.listar(); if (!cache.esActual(carga)) return; setProductos(datos.productos); setSiguiente(datos.siguiente); cache.registrarCarga(carga) }
     catch (e) { setError(e.message || 'No se pudieron cargar los productos.') }
     finally { setCargando(false) }
   }
-  useEffect(() => { cargar() }, [])
+  const cache = useCacheVista('productos', activa, cargar)
   const mas = async () => {
     setCargandoMas(true); setError('')
     try { const datos = await productosApi.listar(siguiente); setProductos(a => [...a, ...datos.productos]); setSiguiente(datos.siguiente) }
@@ -65,13 +68,13 @@ export default function Productos() {
     setActualizando(p.producto_id); setError('')
     try {
       const datos = await productosApi.actualizar(p.producto_id, { estado: p.estado === 'activo' ? 'inactivo' : 'activo' })
-      setProductos(a => a.map(item => item.producto_id === p.producto_id ? datos.producto : item))
+      setProductos(a => a.map(item => item.producto_id === p.producto_id ? datos.producto : item)); invalidarVistas('cotizaciones')
     } catch (e) { setError(e.message || 'No se pudo cambiar el estado del producto.') }
     finally { setActualizando(null) }
   }
   return <>
     <Cabecera t="Productos" sub="Catálogo de lo que vende tu empresa">
-      <button className="btn" onClick={cargar} disabled={cargando}>↻ Actualizar</button>
+      <BotonActualizar onActualizar={cargar} disabled={cargando} />
       {!esVend && <button className="btn pri" onClick={() => setModal('nuevo')}>＋ Nuevo producto</button>}
     </Cabecera>
     {error && <div className="error" role="alert">{error}</div>}
@@ -87,6 +90,6 @@ export default function Productos() {
       {!productos.length && <div className="vacio">No hay productos en esta página.</div>}
       {siguiente && <button className="btn" disabled={cargandoMas} onClick={mas}>{cargandoMas ? 'Cargando…' : 'Cargar más productos'}</button>}
     </>}
-    {modal && <ProductoForm producto={modal === 'nuevo' ? null : modal} onClose={() => setModal(null)} onGuardado={() => { setModal(null); cargar() }} />}
+    {modal && <ProductoForm producto={modal === 'nuevo' ? null : modal} onClose={() => setModal(null)} onGuardado={() => { setModal(null); invalidarVistas('cotizaciones'); cargar() }} />}
   </>
 }

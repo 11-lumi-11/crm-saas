@@ -1,9 +1,11 @@
+import { BotonActualizar } from '../ui'
+import { useCacheVista } from '../cacheVistas'
 import { useEffect, useRef, useState } from 'react'
 import { notificacionesApi } from '../notificacionesApi'
 import { dia } from '../store'
 import { Cabecera } from '../ui'
 
-export default function Notificaciones({ onCambioNotificaciones }) {
+export default function Notificaciones({ onCambioNotificaciones, activa }) {
   const [avisos, setAvisos] = useState([])
   const [siguiente, setSiguiente] = useState(null)
   const [soloNoLeidas, setSoloNoLeidas] = useState(false)
@@ -14,22 +16,25 @@ export default function Notificaciones({ onCambioNotificaciones }) {
   const version = useRef(0)
 
   const cargar = async () => {
+    const carga = cache.iniciarCarga()
     const actual = ++version.current
-    setCargando(true); setError('')
+    if (!cache.estado.current.cargada) setCargando(true); setError('')
     try {
       const datos = await notificacionesApi.listar({ soloNoLeidas })
-      if (actual !== version.current) return
-      setAvisos(datos.notificaciones); setSiguiente(datos.siguiente)
+      if (actual !== version.current || !cache.esActual(carga)) return
+      setAvisos(datos.notificaciones); setSiguiente(datos.siguiente); cache.registrarCarga(carga)
     } catch (e) {
       if (actual === version.current) setError(e.message || 'No se pudieron cargar las notificaciones.')
     } finally {
       if (actual === version.current) setCargando(false)
     }
   }
+  const cache = useCacheVista('notificaciones', activa, cargar)
+  const filtroAnterior = useRef(soloNoLeidas)
   useEffect(() => {
-    cargar()
-    return () => { version.current++ }
+    if (filtroAnterior.current !== soloNoLeidas) { filtroAnterior.current = soloNoLeidas; cargar() }
   }, [soloNoLeidas])
+  useEffect(() => () => { version.current++ }, [])
 
   const mas = async () => {
     const actual = version.current
@@ -56,7 +61,7 @@ export default function Notificaciones({ onCambioNotificaciones }) {
 
   return <>
     <Cabecera t="Notificaciones" sub="Avisos dirigidos a ti o a tu rol">
-      <button className="btn" onClick={cargar} disabled={cargando}>↻ Actualizar</button>
+      <BotonActualizar onActualizar={cargar} disabled={cargando} />
     </Cabecera>
     <p className="nota">Los avisos por eventos pueden tardar unos minutos. Usa Actualizar para volver a consultarlos.</p>
     <label><input type="checkbox" checked={soloNoLeidas} onChange={e => setSoloNoLeidas(e.target.checked)} /> Solo no leídas</label>

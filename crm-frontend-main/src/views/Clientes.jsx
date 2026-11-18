@@ -1,3 +1,5 @@
+import { BotonActualizar } from '../ui'
+import { useCacheVista, invalidarVistas } from '../cacheVistas'
 import { useEffect, useState } from 'react'
 import { clientesApi } from '../clientesApi'
 import { useCrm } from '../store'
@@ -28,6 +30,7 @@ function FormularioCliente({ cliente, onClose, onGuardado }) {
   }
   return <Modal titulo={cliente ? 'Editar cliente' : 'Nuevo cliente'} onClose={onClose}>
     {error && <div className="error" role="alert">{error}</div>}
+    <p className="nota">El correo es opcional. Para recibir avisos de venta, su destinatario debe confirmar la suscripción que recibirá por correo.</p>
     <Form f={camposCliente(cliente)} onSubmit={guardar} disabled={guardando} ok={guardando ? 'Guardando…' : 'Guardar'} />
   </Modal>
 }
@@ -46,6 +49,7 @@ function FormularioContacto({ tienePrincipal, onGuardar, guardando }) {
     <label>Teléfono<input value={datos.telefono} onChange={e => cambiar('telefono', e.target.value)} /></label>
     <label><input type="checkbox" checked={datos.es_principal} disabled={tienePrincipal || guardando}
       onChange={e => cambiar('es_principal', e.target.checked)} /> Contacto principal</label>
+    {datos.es_principal && <small>Si agregas un correo, el contacto deberá confirmar su suscripción para recibir avisos de venta.</small>}
     {tienePrincipal && <small>Este cliente ya tiene un contacto principal.</small>}
     <button className="btn pri" disabled={guardando}>{guardando ? 'Guardando…' : 'Agregar contacto'}</button>
   </form>
@@ -111,7 +115,7 @@ function Ficha({ id, onClose, onCambio }) {
   </Modal>
 }
 
-export default function Clientes() {
+export default function Clientes({ activa }) {
   const { q } = useCrm()
   const [clientes, setClientes] = useState([])
   const [siguiente, setSiguiente] = useState(null)
@@ -120,14 +124,16 @@ export default function Clientes() {
   const [error, setError] = useState('')
   const [m, setM] = useState(null)
   const cargar = async () => {
-    setCargando(true); setError('')
+    const carga = cache.iniciarCarga()
+    if (!cache.estado.current.cargada) setCargando(true); setError('')
     try {
       const datos = await clientesApi.listar()
-      setClientes(datos.clientes); setSiguiente(datos.siguiente)
+      if (!cache.esActual(carga)) return
+      setClientes(datos.clientes); setSiguiente(datos.siguiente); cache.registrarCarga(carga)
     } catch (e) { setError(e.message || 'No se pudieron cargar los clientes.') }
     finally { setCargando(false) }
   }
-  useEffect(() => { cargar() }, [])
+  const cache = useCacheVista('clientes', activa, cargar)
   const mas = async () => {
     setCargandoMas(true); setError('')
     try {
@@ -139,9 +145,9 @@ export default function Clientes() {
   const busqueda = q.toLowerCase().trim()
   const rows = clientes.filter(c => [c.nombre, c.ciudad, c.industria].some(v => (v || '').toLowerCase().includes(busqueda)))
   return <>
-    <Cabecera t="Clientes" sub="Cuentas y contactos de tu empresa"><button className="btn pri" onClick={() => setM('nuevo')}>＋ Nuevo cliente</button></Cabecera>
+    <Cabecera t="Clientes" sub="Cuentas y contactos de tu empresa"><BotonActualizar onActualizar={cargar} disabled={cargando} /><button className="btn pri" onClick={() => setM('nuevo')}>＋ Nuevo cliente</button></Cabecera>
     {error && <div className="error" role="alert">{error} <button className="btn mini" onClick={cargar}>Reintentar</button></div>}
-    {cargando ? <div className="vacio">Cargando clientes…</div> : !error && <>
+    {cargando ? <div className="vacio">Cargando clientes…</div> : <>
       <Tabla vacio={busqueda ? 'No hay coincidencias entre los clientes cargados.' : 'Aún no hay clientes en esta página.'} rows={rows} onRow={c => setM(c.cliente_id)}
         cols={[
           ['Nombre', c => <b>{c.nombre}</b>], ['Tipo', c => c.tipo], ['Industria', c => c.industria || '—'],
@@ -150,7 +156,7 @@ export default function Clientes() {
       {siguiente && <button className="btn" disabled={cargandoMas} onClick={mas}>{cargandoMas ? 'Cargando…' : 'Cargar más clientes'}</button>}
       {siguiente && busqueda && <small>La búsqueda solo incluye los clientes cargados.</small>}
     </>}
-    {m === 'nuevo' && <FormularioCliente onClose={() => setM(null)} onGuardado={() => { setM(null); cargar() }} />}
-    {m && m !== 'nuevo' && <Ficha id={m} onClose={() => setM(null)} onCambio={cargar} />}
+    {m === 'nuevo' && <FormularioCliente onClose={() => setM(null)} onGuardado={() => { setM(null); invalidarVistas('inicio', 'oportunidades', 'cotizaciones', 'notificaciones'); cargar() }} />}
+    {m && m !== 'nuevo' && <Ficha id={m} onClose={() => setM(null)} onCambio={() => { invalidarVistas('inicio', 'oportunidades', 'cotizaciones'); cargar() }} />}
   </>
 }

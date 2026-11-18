@@ -32,10 +32,11 @@ export const crearUsuarioApi = (datos) => {
   return request(AUTH_ENDPOINTS.crearUsuario, datos, { Authorization: token })
 }
 
-export const listarUsuariosApi = async () => {
+export const listarUsuariosApi = async (siguiente) => {
   const token = localStorage.getItem('auth_token')
   if (!token) throw new Error('No se encontró el token de sesión. Vuelve a iniciar sesión.')
-  const response = await fetch(AUTH_ENDPOINTS.crearUsuario, {
+  const params = new URLSearchParams({ limite: '50', ...(siguiente ? { siguiente } : {}) })
+  const response = await fetch(`${AUTH_ENDPOINTS.crearUsuario}?${params}`, {
     method: 'GET',
     headers: { Accept: 'application/json', Authorization: token },
   })
@@ -47,7 +48,7 @@ export const listarUsuariosApi = async () => {
   }
   const usuarios = Array.isArray(body) ? body : body.usuarios || body.items || body.data || []
   if (!Array.isArray(usuarios)) throw new Error('La respuesta de usuarios no tiene el formato esperado.')
-  return usuarios
+  return { usuarios, siguiente: body.siguiente || null }
 }
 
 export const modificarUsuarioApi = (usuarioId, cambios) => {

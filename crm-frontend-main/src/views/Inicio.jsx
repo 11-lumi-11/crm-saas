@@ -1,25 +1,32 @@
+import { BotonActualizar } from '../ui'
+import { useCacheVista, invalidarVistas } from '../cacheVistas'
 import { useState, useEffect } from 'react'
-import { useCrm, ETAPAS, txt, dia, soles } from '../store'
+import { useCrm, ETAPAS, txt, dia } from '../store'
+import { clientesApi } from '../clientesApi'
+import { oportunidadesApi, actividadesApi } from '../apiComercial'
 import { Icono, Form, Modal } from '../ui'
 import { crearUsuarioApi } from '../authApi'
 
 const SLIDES = [
   ['Bienvenido a NodoCRM', 'Ventas, clientes y cotizaciones de tu empresa en un solo lugar.'],
   ['Clientes y contactos', 'Registra cuentas y a las personas con las que hablas.'],
-  ['Pipeline de ventas', 'Mueve cada oportunidad de nueva a ganada o perdida.'],
-  ['Actividades y avisos', 'Las tareas de seguimiento se crean solas cuando algo cambia.'],
+  ['Pipeline de ventas', 'La cotización enviada inicia la negociación y su aceptación confirma la venta.'],
+  ['Actividades y avisos', 'Los seguimientos se crean al enviar cotizaciones.'],
   ['Cotizaciones', 'La aceptación se confirma cuando la oportunidad puede marcarse como ganada.'],
 ]
 const FLUJOS = [
   ['clientes', 'clientes', 'Clientes: registrar su primer cliente', 'Crea una cuenta y agrega su contacto principal', '#d9f2e4', '#1f8a5b'],
-  ['oportunidades', 'oportunidades', 'Oportunidades: cerrar la primera negociación', 'Avanza una oportunidad desde nueva hasta ganada', '#d4ecff', '#0b5cd5'],
+  ['oportunidades', 'oportunidades', 'Oportunidades: cerrar la primera negociación', 'Envía y acepta una cotización para concretar la venta', '#d4ecff', '#0b5cd5'],
   ['cotizaciones', 'cotizaciones', 'Cotizaciones: enviar su primera oferta', 'Arma una cotización con productos del catálogo', '#fde3ec', '#a8164b'],
   ['actividades', 'actividades', 'Actividades: completar un seguimiento', 'Marca una llamada o tarea como completada', '#fff0d1', '#946100'],
 ]
 
-export default function Inicio({ tab, ir }) {
-  const { s, D, esAdmin } = useCrm()
+export default function Inicio({ tab, ir, activa }) {
+  const { s, esAdmin, esVend } = useCrm()
   const [i, setI] = useState(0), [play, setPlay] = useState(false)
+  const [resumen, setResumen] = useState(null)
+  const [cargandoResumen, setCargandoResumen] = useState(false)
+  const [errorResumen, setErrorResumen] = useState('')
   const [mostrarCrearUsuario, setMostrarCrearUsuario] = useState(false)
   const [guardandoUsuario, setGuardandoUsuario] = useState(false)
   const [mensajeUsuario, setMensajeUsuario] = useState('')
@@ -28,6 +35,7 @@ export default function Inicio({ tab, ir }) {
     setGuardandoUsuario(true); setErrorUsuario(''); setMensajeUsuario('')
     try {
       await crearUsuarioApi(datos)
+      invalidarVistas('usuarios', 'notificaciones')
       setMensajeUsuario('Usuario creado correctamente.')
       setMostrarCrearUsuario(false)
     } catch (error) {
@@ -40,20 +48,43 @@ export default function Inicio({ tab, ir }) {
     return () => clearInterval(t)
   }, [play])
 
+  const cargarResumen = async () => {
+    const carga = cache.iniciarCarga()
+    if (!cache.estado.current.cargada) setCargandoResumen(true)
+    setErrorResumen('')
+    try {
+      const [clientes, oportunidades, actividades] = await Promise.all([
+        clientesApi.listar(), oportunidadesApi.listar(),
+        actividadesApi.listar(esVend ? { responsable_id: s.usuario_id } : {}),
+      ])
+      if (!cache.esActual(carga)) return
+      setResumen({ clientes, oportunidades, actividades }); cache.registrarCarga(carga)
+    } catch (error) { setErrorResumen(error.message || 'No se pudo cargar la información general.') }
+    finally { setCargandoResumen(false) }
+  }
+  const cache = useCacheVista('inicio', activa && tab === 1, cargarResumen)
+
+
   if (tab === 1) {
-    const ab = D.oportunidades.filter((o) => !['ganada', 'perdida'].includes(o.etapa))
-    const kpi = [['Clientes', D.clientes.length], ['Oportunidades abiertas', ab.length], ['Pipeline abierto', soles(ab.reduce((a, o) => a + o.monto_estimado, 0))], ['Ganadas', D.oportunidades.filter((o) => o.etapa === 'ganada').length]]
-    const max = Math.max(1, ...ETAPAS.map((e) => D.oportunidades.filter((o) => o.etapa === e).length))
-    const pend = D.actividades.filter((a) => a.estado === 'pendiente')
+    if (cargandoResumen || (!resumen && !errorResumen)) return <div className="vacio">Cargando información general…</div>
+    if (errorResumen && !resumen) return <div className="error" role="alert">{errorResumen} <button className="btn mini" onClick={cargarResumen}>Reintentar</button></div>
+    const oportunidades = resumen.oportunidades.oportunidades
+    const ab = oportunidades.filter((o) => !['ganada', 'perdida'].includes(o.etapa))
+    const kpi = [['Clientes cargados', resumen.clientes.clientes.length], ['Oportunidades abiertas', ab.length], ['Oportunidades ganadas', oportunidades.filter((o) => o.etapa === 'ganada').length]]
+    const max = Math.max(1, ...ETAPAS.map((e) => oportunidades.filter((o) => o.etapa === e).length))
+    const pend = resumen.actividades.actividades.filter((a) => a.estado === 'pendiente')
     return <>
+      <BotonActualizar onActualizar={cargarResumen} disabled={cargandoResumen} />
+      {errorResumen && <div className="error" role="alert">{errorResumen} <button className="btn mini" onClick={cargarResumen}>Reintentar</button></div>}
+      <p className="nota">Resumen de la primera página de cada lista. Los indicadores pueden no incluir todos los registros; consulta cada sección para cargar más.</p>
       <div className="kpis">{kpi.map(([l, v]) => <div className="kpi" key={l}><span>{l}</span><strong>{v}</strong></div>)}</div>
       <div className="dos">
         <section className="panel"><h3>Embudo de ventas</h3>
-          {ETAPAS.map((e) => { const n = D.oportunidades.filter((o) => o.etapa === e).length; return <div className="barra" key={e}><span>{txt(e)}</span><i style={{ width: `${(n / max) * 100}%` }} className={`b-${e}`} /><b>{n}</b></div> })}
+          {ETAPAS.map((e) => { const n = oportunidades.filter((o) => o.etapa === e).length; return <div className="barra" key={e}><span>{txt(e)}</span><i style={{ width: `${(n / max) * 100}%` }} className={`b-${e}`} /><b>{n}</b></div> })}
         </section>
-        <section className="panel"><h3>Próximas actividades</h3>
+        <section className="panel"><h3>Actividades pendientes cargadas</h3>
           {pend.slice(0, 5).map((a) => <div className="fila" key={a.actividad_id}><span>{a.titulo}</span><small>{dia(a.fecha_programada)}</small></div>)}
-          {!pend.length && <div className="vacio">Sin tareas pendientes. Crea una en Actividades.</div>}
+          {!pend.length && <div className="vacio">No hay tareas pendientes en esta página.</div>}
         </section>
       </div>
     </>

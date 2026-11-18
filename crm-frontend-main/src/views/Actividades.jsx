@@ -1,9 +1,11 @@
+import { BotonActualizar } from '../ui'
+import { useCacheVista, invalidarVistas } from '../cacheVistas'
 import { useEffect, useState } from 'react'
 import { actividadesApi } from '../apiComercial'
 import { useCrm, dia } from '../store'
 import { Cabecera, Insignia, Tabla } from '../ui'
 
-export default function Actividades() {
+export default function Actividades({ activa }) {
   const { s, esVend } = useCrm()
   const [items, setItems] = useState([])
   const [siguiente, setSiguiente] = useState(null)
@@ -13,12 +15,13 @@ export default function Actividades() {
   const [error, setError] = useState('')
   const filtro = esVend ? { responsable_id: s.usuario_id } : {}
   const cargar = async () => {
-    setCargando(true); setError('')
-    try { const datos = await actividadesApi.listar(filtro); setItems(datos.actividades); setSiguiente(datos.siguiente) }
+    const carga = cache.iniciarCarga()
+    if (!cache.estado.current.cargada) setCargando(true); setError('')
+    try { const datos = await actividadesApi.listar(filtro); if (!cache.esActual(carga)) return; setItems(datos.actividades); setSiguiente(datos.siguiente); cache.registrarCarga(carga) }
     catch (e) { setError(e.message || 'No se pudieron cargar las actividades.') }
     finally { setCargando(false) }
   }
-  useEffect(() => { cargar() }, [s.usuario_id, esVend])
+  const cache = useCacheVista('actividades', activa, cargar)
   const mas = async () => {
     setCargandoMas(true); setError('')
     try { const datos = await actividadesApi.listar({ ...filtro, siguiente }); setItems(a => [...a, ...datos.actividades]); setSiguiente(datos.siguiente) }
@@ -29,12 +32,12 @@ export default function Actividades() {
     setActualizando(id); setError('')
     try {
       const datos = await actividadesApi.completar(id)
-      setItems(a => a.map(item => item.actividad_id === id ? datos.actividad : item))
+      setItems(a => a.map(item => item.actividad_id === id ? datos.actividad : item)); invalidarVistas('inicio', 'notificaciones')
     } catch (e) { setError(e.message || 'No se pudo completar la actividad.') }
     finally { setActualizando(null) }
   }
   return <>
-    <Cabecera t="Actividades" sub="Seguimientos y tareas reales de tu empresa"><button className="btn" onClick={cargar} disabled={cargando}>↻ Actualizar</button></Cabecera>
+    <Cabecera t="Actividades" sub="Seguimientos y tareas reales de tu empresa"><BotonActualizar onActualizar={cargar} disabled={cargando} /></Cabecera>
     <p className="nota">Los seguimientos automáticos pueden tardar unos minutos en aparecer. Usa Actualizar para consultarlos.</p>
     {error && <div className="error" role="alert">{error}</div>}
     {cargando ? <div className="vacio">Cargando actividades…</div> : <>

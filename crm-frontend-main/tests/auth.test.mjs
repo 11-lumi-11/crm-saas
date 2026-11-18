@@ -19,6 +19,7 @@ async function cargar({ storage = almacenamiento(), responder } = {}) {
   const llamadas = []
   const context = vm.createContext({
     localStorage: storage,
+    URLSearchParams,
     structuredClone,
     setTimeout: () => 1,
     clearTimeout: () => {},
@@ -37,7 +38,7 @@ async function cargar({ storage = almacenamiento(), responder } = {}) {
   const store = new vm.SourceTextModule(storeSource, { context })
   await store.link(specifier => specifier === 'react' ? react : api)
   await store.evaluate()
-  return { store: store.namespace, storage, llamadas }
+  return { store: store.namespace, api: api.namespace, storage, llamadas }
 }
 
 const respuesta = (data, status = 200) => ({ ok: status < 400, status, json: async () => data })
@@ -78,4 +79,15 @@ test('una respuesta incompleta y los errores de negocio no inician sesión', asy
   const error = await cargar({ responder: () => respuesta({ mensaje: 'Credenciales inválidas' }, 401) })
   assert.equal(await error.store.login({ correo: 'a@example.test' }), 'Credenciales inválidas')
   assert.equal(error.store.useCrm().s, null)
+})
+
+test('el listado de usuarios conserva el cursor de la API', async () => {
+  const storage = almacenamiento({ auth_token: 'token-demo' })
+  const { api, llamadas } = await cargar({ storage, responder: () => respuesta({ usuarios: [{ usuario_id: 'usr_1' }], siguiente: 'usr_1' }) })
+  storage.setItem('auth_token', 'token-demo')
+  const datos = await api.listarUsuariosApi('usr_anterior')
+  const url = new URL(llamadas[0].url)
+  assert.equal(url.searchParams.get('siguiente'), 'usr_anterior')
+  assert.equal(datos.usuarios[0].usuario_id, 'usr_1')
+  assert.equal(datos.siguiente, 'usr_1')
 })

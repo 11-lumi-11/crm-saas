@@ -1,3 +1,5 @@
+import { BotonActualizar } from '../ui'
+import { useCacheVista, invalidarVistas } from '../cacheVistas'
 import { useEffect, useState } from 'react'
 import { oportunidadesApi } from '../apiComercial'
 import { clientesApi } from '../clientesApi'
@@ -95,7 +97,7 @@ function Detalle({ id, clientes, onClose, onCambio }) {
   </Modal>
 }
 
-export default function Oportunidades() {
+export default function Oportunidades({ activa }) {
   const [lista, setLista] = useState([])
   const [siguiente, setSiguiente] = useState(null)
   const [clientes, setClientes] = useState([])
@@ -107,14 +109,16 @@ export default function Oportunidades() {
   const [errorClientes, setErrorClientes] = useState('')
   const [modal, setModal] = useState(null)
   const cargar = async () => {
-    setCargando(true); setError('')
+    const carga = cache.iniciarCarga()
+    if (!cache.estado.current.cargada) setCargando(true); setError('')
     try {
       const [o, c] = await Promise.all([oportunidadesApi.listar(), clientesApi.listar()])
-      setLista(o.oportunidades); setSiguiente(o.siguiente); setClientes(c.clientes); setCursorClientes(c.siguiente)
+      if (!cache.esActual(carga)) return
+      setLista(o.oportunidades); setSiguiente(o.siguiente); setClientes(c.clientes); setCursorClientes(c.siguiente); cache.registrarCarga(carga)
     } catch (e) { setError(e.message || 'No se pudieron cargar las oportunidades.') }
     finally { setCargando(false) }
   }
-  useEffect(() => { cargar() }, [])
+  const cache = useCacheVista('oportunidades', activa, cargar)
   const mas = async () => {
     setCargandoMas(true); setError('')
     try { const datos = await oportunidadesApi.listar(siguiente); setLista(a => [...a, ...datos.oportunidades]); setSiguiente(datos.siguiente) }
@@ -128,21 +132,23 @@ export default function Oportunidades() {
     finally { setCargandoClientes(false) }
   }
   return <>
-    <Cabecera t="Oportunidades" sub="Pipeline de ventas por etapa"><button className="btn" onClick={cargar} disabled={cargando}>↻ Actualizar</button> <button className="btn pri" onClick={() => setModal('nueva')} disabled={cargando}>＋ Nueva oportunidad</button></Cabecera>
+    <Cabecera t="Oportunidades" sub="Pipeline de ventas por etapa"><BotonActualizar onActualizar={cargar} disabled={cargando} /> <button className="btn pri" onClick={() => setModal('nueva')} disabled={cargando}>＋ Nueva oportunidad</button></Cabecera>
     {error && <div className="error" role="alert">{error} <button className="btn mini" onClick={cargar}>Reintentar</button></div>}
     {cargando ? <div className="vacio">Cargando oportunidades…</div> : <>
-      <div className="kanban">{ETAPAS.map(etapa => {
-        const items = lista.filter(o => o.etapa === etapa)
-        return <div className="col" key={etapa}><h4><Insignia v={etapa} /> <small>{items.length}</small></h4>
+      <div className="kanban">{[...ETAPAS, ...(lista.some(o => !ETAPAS.includes(o.etapa)) ? ['otras'] : [])].map(etapa => {
+        const items = lista.filter(o => etapa === 'otras' ? !ETAPAS.includes(o.etapa) : o.etapa === etapa)
+        return <div className="col" key={etapa}><h4><Insignia v={etapa === 'otras' ? 'etapas anteriores' : etapa} /> <small>{items.length}</small></h4>
           {items.map(o => <button type="button" className="col-card" key={o.oportunidad_id} onClick={() => setModal({ id: o.oportunidad_id })}>
             <b>{o.titulo}</b><span>{clientes.find(c => c.cliente_id === o.cliente_id)?.nombre || o.cliente_nombre || o.cliente_id}</span><strong>{soles(o.monto_estimado, o.moneda)}</strong>
+            {etapa === 'otras' && <small>Etapa anterior: {txt(o.etapa)}</small>}
           </button>)}
         </div>
       })}</div>
       {siguiente && <button className="btn" disabled={cargandoMas} onClick={mas}>{cargandoMas ? 'Cargando…' : 'Cargar más oportunidades'}</button>}
-      <p className="nota">El tablero muestra las oportunidades cargadas. Los seguimientos automáticos pueden tardar unos minutos.</p>
+      <p className="nota">Al registrar el envío de una cotización, la oportunidad pasa a negociación. La aceptación confirmada la marca como ganada; también puedes marcarla como perdida. Los cambios automáticos pueden tardar unos minutos.</p>
+      {siguiente && <p className="nota">El tablero muestra solo las oportunidades cargadas.</p>}
     </>}
-    {modal === 'nueva' && <Nueva clientes={clientes} siguiente={cursorClientes} cargarMas={masClientes} cargandoMas={cargandoClientes} errorClientes={errorClientes} onClose={() => { setModal(null); setErrorClientes('') }} onGuardada={() => { setModal(null); cargar() }} />}
-    {modal?.id && <Detalle id={modal.id} clientes={clientes} onClose={() => setModal(null)} onCambio={cargar} />}
+    {modal === 'nueva' && <Nueva clientes={clientes} siguiente={cursorClientes} cargarMas={masClientes} cargandoMas={cargandoClientes} errorClientes={errorClientes} onClose={() => { setModal(null); setErrorClientes('') }} onGuardada={() => { setModal(null); invalidarVistas('inicio', 'cotizaciones', 'notificaciones'); cargar() }} />}
+    {modal?.id && <Detalle id={modal.id} clientes={clientes} onClose={() => setModal(null)} onCambio={() => { invalidarVistas('inicio', 'actividades', 'cotizaciones', 'notificaciones'); cargar() }} />}
   </>
 }

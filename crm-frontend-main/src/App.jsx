@@ -11,6 +11,7 @@ import Cotizaciones from './views/Cotizaciones'
 import Notificaciones from './views/Notificaciones'
 import Usuarios from './views/Usuarios'
 import { notificacionesApi } from './notificacionesApi'
+import { leerVista, guardarVista, limpiarVista } from './navegacion'
 
 const VISTAS = { inicio: Inicio, clientes: Clientes, oportunidades: Oportunidades, actividades: Actividades, productos: Productos, cotizaciones: Cotizaciones, notificaciones: Notificaciones, usuarios: Usuarios }
 const TITULOS = { inicio: 'Inicio', clientes: 'Clientes', oportunidades: 'Oportunidades', actividades: 'Actividades', productos: 'Productos', cotizaciones: 'Cotizaciones', notificaciones: 'Notificaciones', usuarios: 'Usuarios' }
@@ -18,9 +19,10 @@ const RAIL = ['inicio', 'clientes', 'oportunidades', 'actividades', 'productos',
 
 export default function App() {
   const { s, tenant, aviso, q, esAdmin } = useCrm()
-  const [vista, setVista] = useState('inicio'), [tab, setTab] = useState(0)
-  const [pop, setPop] = useState(null), [ayuda, setAyuda] = useState(true)
+  const [vista, setVista] = useState(() => leerVista(s).vista), [tab, setTab] = useState(() => leerVista(s).tab)
+  const [pop, setPop] = useState(null), [ayuda, setAyuda] = useState(false)
   const [hayAvisos, setHayAvisos] = useState(false)
+  useEffect(() => { const guardada = leerVista(s); setVista(guardada.vista); setTab(guardada.tab) }, [s?.usuario_id, s?.tenant_id, s?.rol])
 
   useEffect(() => {
     if (!s) { setHayAvisos(false); return }
@@ -50,8 +52,7 @@ export default function App() {
   if (!s) return <Auth /> // sin sesión no se ve ninguna otra vista
 
   const actualizarAvisos = () => window.dispatchEvent(new Event('crm:avisos-actualizados'))
-  const ir = (v) => { setVista(v); setTab(0); setPop(null); if (v === 'notificaciones') actualizarAvisos() }
-  const Vista = VISTAS[vista]
+  const ir = (v) => { setVista(v); setTab(0); guardarVista(s, v, 0); setPop(null) }
   const tabs = vista === 'inicio' ? ['Inicio', 'Información general'] : [TITULOS[vista]]
 
   return (
@@ -62,7 +63,7 @@ export default function App() {
         </button>)}
       </aside>
       <div className="sf-col">
-        <div className="promo"><span><b>{tenant.nombre}</b>: los indicadores de Inicio muestran datos de demostración.</span><button className="btn" onClick={() => ir('inicio')}>Ver flujos</button><div className="rol">Tu rol: <b>{s.rol}</b></div></div>
+        <div className="promo"><span><b>{tenant.nombre}</b>: gestiona tus clientes y oportunidades.</span><button className="btn" onClick={() => ir('inicio')}>Ver flujos</button><div className="rol">Tu rol: <b>{s.rol}</b></div></div>
         <header className="sf-top">
           <div className="logo"><svg width="44" height="44" viewBox="0 0 24 24"><path fill="var(--or)" d="M7.5 19a4.5 4.5 0 0 1-.9-8.9A6 6 0 0 1 18 9a5 5 0 0 1-.5 10z" /></svg>Nodo<b>CRM</b></div>
           <div className="sf-search"><Icono n="buscar" s={20} /><input placeholder="Buscar clientes…" value={q} onChange={(e) => { setQ(e.target.value); ir('clientes') }} />
@@ -76,12 +77,15 @@ export default function App() {
             <button onClick={() => ir('notificaciones')} aria-label="Notificaciones"><Icono n="notificaciones" s={24} />{hayAvisos && <span className="badge" aria-label="Hay avisos sin leer">•</span>}</button>
             <button className="avatar" onClick={() => setPop(pop === 'user' ? null : 'user')} aria-label="Cuenta">{s.nombre[0]}</button>
           </div>
-          {pop === 'user' && <div className="pop"><b>{s.nombre}</b><small>{tenant.nombre} · {s.rol}</small><button onClick={salir}>Cerrar sesión</button></div>}
+          {pop === 'user' && <div className="pop"><b>{s.nombre}</b><small>{tenant.nombre} · {s.rol}</small><button onClick={() => { limpiarVista(); salir() }}>Cerrar sesión</button></div>}
           {ayuda && <div className="ayuda"><button className="x" onClick={() => setAyuda(false)} aria-label="Cerrar">✕</button><b>Vuelva siempre que quiera</b><p>Haz clic en el icono ? para obtener ayuda siempre que la necesites.</p></div>}
         </header>
         {pop && <div className="cierra" onClick={() => setPop(null)} />}
-        <div className="sf-head"><h1>{TITULOS[vista]}</h1><nav>{tabs.map((t, n) => <button key={t} className={tab === n ? 'on' : ''} onClick={() => setTab(n)}>{t}</button>)}</nav></div>
-        <main key={vista}><Vista tab={tab} ir={ir} onCambioNotificaciones={actualizarAvisos} /></main>
+        <div className="sf-head"><h1>{TITULOS[vista]}</h1><nav>{tabs.map((t, n) => <button key={t} className={tab === n ? 'on' : ''} onClick={() => { setTab(n); guardarVista(s, vista, n) }}>{t}</button>)}</nav></div>
+        <main>{RAIL.filter(nombre => nombre !== 'usuarios' || esAdmin).map(nombre => {
+          const Vista = VISTAS[nombre]
+          return <div key={`${s.tenant_id}:${s.usuario_id}:${nombre}`} hidden={vista !== nombre}><Vista activa={vista === nombre} tab={tab} ir={ir} onCambioNotificaciones={actualizarAvisos} /></div>
+        })}</main>
         <div className="todo"><button onClick={() => ir('actividades')}><Icono n="lista" s={20} />Ver actividades</button></div>
       </div>
       {aviso && <div className="toast">✓ {aviso}</div>}

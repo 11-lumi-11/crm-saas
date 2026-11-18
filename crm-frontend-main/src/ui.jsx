@@ -49,6 +49,29 @@ export const Cabecera = ({ t, sub, children }) => (
   <div className="cab"><p>{sub}</p><div>{children}</div></div>
 )
 
+// Mantiene el contenido visible y confirma que la consulta está en curso.
+export function BotonActualizar({ onActualizar, disabled = false }) {
+  const [actualizando, setActualizando] = useState(false)
+  const actualizar = async () => {
+    setActualizando(true)
+    const inicio = Date.now()
+    try { await onActualizar() }
+    finally {
+      const restante = Math.max(0, 450 - (Date.now() - inicio))
+      if (restante) await new Promise(resolve => setTimeout(resolve, restante))
+      setActualizando(false)
+    }
+  }
+  return <span className="actualizar-control">
+    <button type="button" className="btn" onClick={actualizar} disabled={disabled || actualizando}>
+      <span className={actualizando ? 'actualizar-icono girando' : 'actualizar-icono'} aria-hidden="true">↻</span>{' '}
+      {actualizando ? 'Actualizando…' : 'Actualizar'}
+    </button>
+    {actualizando && <span className="actualizar-skeleton" aria-hidden="true" />}
+    <span className="actualizar-estado" role="status">{actualizando ? 'Actualizando datos' : ''}</span>
+  </span>
+}
+
 const P = {
   inicio: 'M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z',
   clientes: 'M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 3-5 6-5s6 2 6 5M14 15c3 0 8 1 8 5',

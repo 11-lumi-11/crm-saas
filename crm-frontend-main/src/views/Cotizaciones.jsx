@@ -1,3 +1,5 @@
+import { BotonActualizar } from '../ui'
+import { useCacheVista, invalidarVistas } from '../cacheVistas'
 import { useEffect, useState } from 'react'
 import { cotizacionesApi, productosApi } from '../productosApi'
 import { aplicarResultadoAceptacion } from '../aceptacionCotizacion'
@@ -92,7 +94,7 @@ function CotForm({ onClose, onGuardada }) {
   </Modal>
 }
 
-export default function Cotizaciones() {
+export default function Cotizaciones({ activa }) {
   const { esVend } = useCrm()
   const [cotizaciones, setCotizaciones] = useState([])
   const [siguiente, setSiguiente] = useState(null)
@@ -104,12 +106,13 @@ export default function Cotizaciones() {
   const [errorSeguimiento, setErrorSeguimiento] = useState('')
   const [modal, setModal] = useState(false)
   const cargar = async () => {
-    setCargando(true); setError('')
-    try { const datos = await cotizacionesApi.listar(); setCotizaciones(datos.cotizaciones); setSiguiente(datos.siguiente) }
+    const carga = cache.iniciarCarga()
+    if (!cache.estado.current.cargada) setCargando(true); setError('')
+    try { const datos = await cotizacionesApi.listar(); if (!cache.esActual(carga)) return; setCotizaciones(datos.cotizaciones); setSiguiente(datos.siguiente); cache.registrarCarga(carga) }
     catch (e) { setError(e.message || 'No se pudieron cargar las cotizaciones.') }
     finally { setCargando(false) }
   }
-  useEffect(() => { cargar() }, [])
+  const cache = useCacheVista('cotizaciones', activa, cargar)
   const pendientes = cotizaciones.filter(c => c.estado === 'aceptacion_pendiente').map(c => c.cotizacion_id).sort().join(',')
   useEffect(() => {
     if (!pendientes) return
@@ -123,7 +126,9 @@ export default function Cotizaciones() {
       setCotizaciones(actuales => actuales.map(c => {
         const indice = ids.indexOf(c.cotizacion_id)
         if (indice < 0 || c.estado !== 'aceptacion_pendiente' || resultados[indice].status !== 'fulfilled') return c
-        return aplicarResultadoAceptacion(c, resultados[indice].value.cotizacion)
+        const resultado = aplicarResultadoAceptacion(c, resultados[indice].value.cotizacion)
+        if (resultado.estado !== 'aceptacion_pendiente') invalidarVistas('oportunidades', 'actividades', 'notificaciones', 'inicio')
+        return resultado
       }))
     }
     revisar()
@@ -141,6 +146,7 @@ export default function Cotizaciones() {
     setActualizando(c.cotizacion_id); setError(''); setAviso('')
     try {
       const resultado = await cotizacionesApi[accion](c.cotizacion_id)
+      invalidarVistas('oportunidades', 'actividades', 'notificaciones', 'inicio')
       if (accion === 'aceptar') {
         setCotizaciones(a => a.map(item => item.cotizacion_id === c.cotizacion_id
           ? { ...item, estado: 'aceptacion_pendiente', resultado_aceptacion: '', fecha_solicitud_aceptacion: resultado.fecha_solicitud, _solicitudAnterior: c.solicitud_aceptacion_id || null } : item))
@@ -148,6 +154,9 @@ export default function Cotizaciones() {
       } else if (accion === 'archivar') {
         setCotizaciones(a => a.filter(item => item.cotizacion_id !== c.cotizacion_id))
         setAviso('Cotización archivada.')
+      } else if (accion === 'enviar') {
+        setCotizaciones(a => a.map(item => item.cotizacion_id === c.cotizacion_id ? { ...item, estado: resultado.estado } : item))
+        setAviso('Envío registrado. La oportunidad pasará a negociación y se programará un seguimiento.')
       } else {
         setCotizaciones(a => a.map(item => item.cotizacion_id === c.cotizacion_id ? { ...item, estado: resultado.estado } : item))
         setAviso(resultado.mensaje || 'Cotización actualizada.')
@@ -157,12 +166,13 @@ export default function Cotizaciones() {
   }
   return <>
     <Cabecera t="Cotizaciones" sub="Ofertas formales para tus oportunidades">
-      <button className="btn" onClick={cargar} disabled={cargando}>↻ Actualizar</button>
+      <BotonActualizar onActualizar={cargar} disabled={cargando} />
       <button className="btn pri" onClick={() => setModal(true)}>＋ Nueva cotización</button>
     </Cabecera>
     {error && <div className="error" role="alert">{error}</div>}
     {pendientes && errorSeguimiento && <div className="error" role="alert">{errorSeguimiento}</div>}
     {aviso && <p role="status" className="nota">{aviso}</p>}
+    <p className="nota">Registrar un envío actualiza el CRM; la cotización debe entregarse al cliente por separado. Al confirmar una venta, se intenta enviar un aviso a los correos del cliente y su contacto principal que hayan confirmado la suscripción.</p>
     {cargando ? <div className="vacio">Cargando cotizaciones…</div> : <>
       <Tabla vacio="No hay cotizaciones en esta página." rows={cotizaciones}
         cols={[
@@ -171,7 +181,7 @@ export default function Cotizaciones() {
           ['Vence', c => dia(c.fecha_vencimiento)],
           ['Estado', c => <div><Insignia v={c.estado} />{c.estado === 'aceptacion_pendiente' && <small> Esperando confirmación…</small>}{c.estado === 'aceptacion_pendiente' && c.fecha_solicitud_aceptacion && Date.now() - Date.parse(c.fecha_solicitud_aceptacion) >= 30 * 60 * 1000 && <p className="error" role="status">La confirmación está tardando más de lo esperado. Contacta a soporte.</p>}{c.resultado_aceptacion && <p className="error" role="status">{c.resultado_aceptacion}</p>}</div>],
           ['Acciones', c => <div className="acciones">
-            {c.estado === 'borrador' && <button className="btn mini" disabled={Boolean(actualizando)} onClick={() => actuar(c, 'enviar')}>Enviar</button>}
+            {c.estado === 'borrador' && <button className="btn mini" disabled={Boolean(actualizando)} onClick={() => actuar(c, 'enviar')}>Registrar envío</button>}
             {c.estado === 'enviada' && <><button className="btn mini ok" disabled={Boolean(actualizando)} onClick={() => actuar(c, 'aceptar')}>Aceptar</button><button className="btn mini no" disabled={Boolean(actualizando)} onClick={() => actuar(c, 'rechazar')}>Rechazar</button></>}
             {!esVend && !['aceptada', 'aceptacion_pendiente'].includes(c.estado) && <button className="btn mini" disabled={Boolean(actualizando)} onClick={() => actuar(c, 'archivar')}>Archivar</button>}
           </div>],

@@ -1,27 +1,39 @@
+import { BotonActualizar } from '../ui'
+import { useCacheVista, invalidarVistas } from '../cacheVistas'
 import { useEffect, useState } from 'react'
-import { useCrm } from '../store'
 import { listarUsuariosApi, modificarUsuarioApi } from '../authApi'
-import { Cabecera, Form, Insignia, Modal, Tabla } from '../ui'
+import { Cabecera, Insignia } from '../ui'
 
 const POR_PAGINA = 6
 
-export default function Usuarios() {
-  const { s, D, acc } = useCrm()
+export default function Usuarios({ activa }) {
   const [usuarios, setUsuarios] = useState([])
+  const [siguiente, setSiguiente] = useState(null)
+  const [cargandoMas, setCargandoMas] = useState(false)
+  const [errorMas, setErrorMas] = useState('')
   const [pagina, setPagina] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
-  const [m, setM] = useState(false)
   const [actualizando, setActualizando] = useState({})
   const [erroresUsuario, setErroresUsuario] = useState({})
 
   const cargarUsuarios = async () => {
-    setCargando(true); setError('')
-    try { setUsuarios(await listarUsuariosApi()); setPagina(0) }
+    const carga = cache.iniciarCarga()
+    if (!cache.estado.current.cargada) setCargando(true); setError('')
+    try { const datos = await listarUsuariosApi(); if (!cache.esActual(carga)) return; setUsuarios(datos.usuarios); setSiguiente(datos.siguiente); setPagina(0); setErrorMas(''); cache.registrarCarga(carga) }
     catch (e) { setError(e.message || 'No se pudo cargar la lista de usuarios.') }
     finally { setCargando(false) }
   }
-  useEffect(() => { cargarUsuarios() }, [])
+  const cache = useCacheVista('usuarios', activa, cargarUsuarios)
+
+  const cargarMas = async () => {
+    setCargandoMas(true); setErrorMas('')
+    try {
+      const datos = await listarUsuariosApi(siguiente)
+      setUsuarios(actuales => [...actuales, ...datos.usuarios]); setSiguiente(datos.siguiente)
+    } catch (e) { setErrorMas(e.message || 'No se pudieron cargar más usuarios.') }
+    finally { setCargandoMas(false) }
+  }
 
   const totalPaginas = Math.max(1, Math.ceil(usuarios.length / POR_PAGINA))
   const paginaActual = Math.min(pagina, totalPaginas - 1)
@@ -48,13 +60,13 @@ export default function Usuarios() {
 
   return <>
     <Cabecera t="Usuarios" sub="Equipo y roles de tu empresa">
-      <button className="btn" onClick={cargarUsuarios} disabled={cargando}>{cargando ? 'Actualizando…' : '↻ Actualizar'}</button>
+      <BotonActualizar onActualizar={cargarUsuarios} disabled={cargando} />
     </Cabecera>
 
     {error && <div className="error" role="alert">{error}</div>}
-    {cargando ? <div className="vacio usuarios-estado">Cargando usuarios…</div> : !error && usuarios.length === 0 ?
-      <div className="vacio usuarios-estado">La API todavía no devuelve usuarios.</div> : !error && <>
-        <div className="usuarios-resumen">{usuarios.length} {usuarios.length === 1 ? 'usuario' : 'usuarios'}</div>
+    {cargando ? <div className="vacio usuarios-estado">Cargando usuarios…</div> : usuarios.length === 0 ?
+      <div className="vacio usuarios-estado">La API todavía no devuelve usuarios.</div> : <>
+        <div className="usuarios-resumen">{usuarios.length} {usuarios.length === 1 ? 'usuario cargado' : 'usuarios cargados'}</div>
         <div className="usuarios-grid">
           {visibles.map((u, indice) => <article className="usuario-card" key={u.usuario_id || u.id || u.correo || `${paginaActual}-${indice}`} style={{ '--entrada': `${indice * 65}ms` }}>
             <div className="usuario-card-top"><span className="usuario-avatar">{(u.nombre || '?').trim().charAt(0).toUpperCase()}</span><Insignia v={u.estado || 'sin estado'} /></div>
@@ -84,21 +96,10 @@ export default function Usuarios() {
           <span>Página {paginaActual + 1} de {totalPaginas}</span>
           <button className="btn" onClick={() => setPagina((p) => Math.min(totalPaginas - 1, p + 1))} disabled={paginaActual >= totalPaginas - 1}>Siguiente</button>
         </nav>
+        {errorMas && <p className="error" role="alert">{errorMas}</p>}
+        {siguiente && <button className="btn" disabled={cargandoMas} onClick={cargarMas}>{cargandoMas ? 'Cargando…' : 'Cargar más usuarios'}</button>}
       </>}
 
-    <details className="usuarios-demo">
-      <summary>Datos locales de demostración y gestión de roles</summary>
-      <div className="usuarios-demo-contenido">
-        <Cabecera t="Equipo local" sub="Estos cambios pertenecen a la demo local del CRM."><button className="btn pri" onClick={() => setM(true)}>＋ Nuevo usuario</button></Cabecera>
-        <Tabla vacio="Sin usuarios locales." rows={D.usuarios}
-          cols={[
-            ['Nombre', (u) => <b>{u.nombre}</b>], ['Correo', (u) => u.correo],
-            ['Rol', (u) => <select value={u.rol} onChange={(e) => acc.editUsuario(u.usuario_id, { rol: e.target.value })}>{['admin', 'gerente', 'vendedor'].map((r) => <option key={r}>{r}</option>)}</select>],
-            ['Estado', (u) => <Insignia v={u.estado} />],
-            ['', (u) => u.usuario_id !== s.usuario_id && <button className="btn mini" onClick={() => acc.editUsuario(u.usuario_id, { estado: u.estado === 'activo' ? 'inactivo' : 'activo' })}>{u.estado === 'activo' ? 'Desactivar' : 'Activar'}</button>],
-          ]} />
-      </div>
-      {m && <Modal titulo="Nuevo usuario local" onClose={() => setM(false)}><Form onSubmit={(v) => { acc.usuario(v); setM(false) }} f={[{ k: 'nombre', l: 'Nombre completo' }, { k: 'correo', l: 'Correo', t: 'email' }, { k: 'contrasena', l: 'Contraseña', t: 'password' }, { k: 'rol', l: 'Rol', o: ['vendedor', 'gerente', 'admin'] }]} /></Modal>}
-    </details>
+
   </>
 }
