@@ -26,7 +26,7 @@ La revisión del 2026-11-11 y sus pruebas fueron locales. El 2026-11-12 Serverle
 | Productos y Cotizaciones | Sí | Catálogo, cotizaciones, aceptación asíncrona coordinada con Oportunidades y outbox | Pruebas nuevas con dobles para el protocolo; integración AWS pendiente | Pendiente de evidencia |
 | Actividades | Sí | CRUD, consumidor SQS, outbox y continuación programada para oportunidades perdidas | Pruebas locales de barrera y paginación; validación con volumen pendiente | Pendiente de evidencia |
 | Generación/carga de datos ficticios | Requisitos definidos | `generar_datos.py` y `cargar_datos.py` vacíos; sí existe migración de integridad | Migración cubierta por pruebas locales | Pendiente |
-| Frontend Amplify | Visión funcional | Frontend oficial en `crm-frontend-main`; flujos integrados y pendientes en su registro de estado | Flujos principales comprobados por el usuario desde localhost | Publicado en `dev`; HTTP 200; flujos desde la URL pendiente de prueba |
+| Frontend Amplify | Visión funcional | Frontend oficial en `crm-frontend-main`; resumen parcial con datos de API y flujos actuales; pendientes en su registro de estado | Pruebas y compilación locales; las últimas modificaciones no se han probado en AWS | La versión anterior está publicada en `dev`; actualización pendiente |
 | Pruebas y herramientas | Colección Postman y validación local | Pruebas de aceptación y Notificaciones en `tests/`; la suite anterior no está en el remoto | Ver [validación local](validacion_local.md) | Postman pendiente de ejecución documentada |
 
 ### Correcciones realizadas el 2026-11-11
@@ -755,6 +755,8 @@ Cualquier cambio de nombres, campos, rutas o eventos se documenta aquí junto co
 - [x] Confirmar que todos los servicios usan DynamoDB (el enunciado permite SQL o NoSQL por servicio).
 
 ## 14. Validación, pendientes y evidencia AWS
+
+**Despliegue 2026-11-17 (hora de Lima; 2026-11-18 UTC):** Serverless Framework 4 desplegó `compartido` y los seis servicios en la cuenta de laboratorio terminada en `5495`, región `us-east-1`, stage `dev`. CloudFormation informó `UPDATE_COMPLETE` para las siete pilas. Las alarmas de las DLQ de solicitud y resultado de aceptación aparecen en estado `OK`. La capa común publicada es `dev-crm-comun:2`. El despliegue y el estado de las alarmas no acreditan pruebas funcionales, entrega de correo ni permisos SNS de las funciones; esos casos siguen pendientes de validación.
 
 ### Evidencia local
 
