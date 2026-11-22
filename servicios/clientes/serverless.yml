@@ -27,6 +27,8 @@ provider:
   environment:
     TABLE_CLIENTES: ${sls:stage}-t_clientes
     TABLE_CONTACTOS: ${sls:stage}-t_contactos
+    TABLE_DOCUMENTOS: ${sls:stage}-t_documentos_clientes
+    BUCKET_DOCUMENTOS: !Ref BucketDocumentos
     TABLE_VENTAS_RECIBIDAS: ${sls:stage}-t_ventas_recibidas_clientes
     INDEX_CLIENTE: cliente_id-index
     TABLE_EVENTOS: ${sls:stage}-t_eventos_clientes
@@ -101,8 +103,70 @@ functions:
           authorizer:
             name: authorizerJwt
 
+  subirDocumento:
+    handler: src/Documentos.subir
+    events:
+      - httpApi:
+          path: /clientes/{cliente_id}/documentos
+          method: post
+          authorizer:
+            name: authorizerJwt
+
+  listarDocumentos:
+    handler: src/Documentos.listar
+    events:
+      - httpApi:
+          path: /clientes/{cliente_id}/documentos
+          method: get
+          authorizer:
+            name: authorizerJwt
+
+  descargarDocumento:
+    handler: src/Documentos.descargar
+    events:
+      - httpApi:
+          path: /clientes/{cliente_id}/documentos/{documento_id}/descargar
+          method: get
+          authorizer:
+            name: authorizerJwt
+
 resources:
   Resources:
+    BucketDocumentos:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+
+    TablaDocumentos:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_DOCUMENTOS}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - {AttributeName: tenant_id, AttributeType: S}
+          - {AttributeName: documento_id, AttributeType: S}
+          - {AttributeName: cliente_id, AttributeType: S}
+        KeySchema:
+          - {AttributeName: tenant_id, KeyType: HASH}
+          - {AttributeName: documento_id, KeyType: RANGE}
+        GlobalSecondaryIndexes:
+          - IndexName: cliente_id-index
+            KeySchema:
+              - {AttributeName: tenant_id, KeyType: HASH}
+              - {AttributeName: cliente_id, KeyType: RANGE}
+            Projection:
+              ProjectionType: ALL
+
     TablaVentasRecibidas:
       Type: AWS::DynamoDB::Table
       Properties:
