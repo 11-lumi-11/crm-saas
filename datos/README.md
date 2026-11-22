@@ -21,3 +21,9 @@ La generación usa la fecha fija 2026-11-14 y una semilla para los datos comerci
 ```
 
 El script no registra suscripciones SNS de correo ni reconstruye los eventos históricos del outbox. Para la demo de correo usa clientes creados mediante el flujo normal y destinatarios que hayan confirmado la suscripción. El script no modifica ni elimina registros existentes distintos de los generados.
+
+## Evidencia de carga en `dev`
+
+El 2026-11-22 se cargaron 309 634 registros de 14 tablas en la cuenta de laboratorio terminada en `5495`, región `us-east-1`. Una consulta consistente verificó 10 000 registros para cada uno de los tres tenants en cada una de las seis tablas principales. Se probó el login de las cuentas admin de `ten_seguros` y `ten_electro`, sus listados de clientes y oportunidades, y el acceso de ElectroHogar a un cliente de Seguros Andinos Demo devolvió 404. Los datos se cargaron sin invocar Lambdas para la importación.
+
+El nombre `Seguros Andinos` ya correspondía a otra empresa. El tenant ficticio `ten_seguros` se identificó como `Seguros Andinos Demo`, preservando la empresa original. Se completó la carga tras verificar de nuevo los datos y nombres de tenant.
