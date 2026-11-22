@@ -1,0 +1,399 @@
+{
+  "info": {
+    "name": "CRM SaaS - Parameter Store y documentos S3",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Prueba secuencial de login, rutas protegidas, documentos e aislamiento entre dos tenants."
+  },
+  "item": [
+    {
+      "name": "1. Login del tenant A",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{usuarios_url}}/usuarios/login",
+          "host": [
+            "{{usuarios_url}}/usuarios/login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"correo\": \"{{correo_a}}\", \"contrasena\": \"{{contrasena_a}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "['token_a','token_b','documento_id','url_descarga','tenant_a','tenant_b'].forEach(k => pm.collectionVariables.unset(k)); pm.collectionVariables.set('documentos_siguiente', '');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) { const d = pm.response.json(); pm.collectionVariables.set('token_a', d.token); pm.collectionVariables.set('tenant_a', d.tenant_id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1b. Listar clientes para elegir un ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_a}}"
+          }
+        ],
+        "url": {
+          "raw": "{{clientes_url}}/clientes",
+          "host": [
+            "{{clientes_url}}/clientes"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Consultar cliente del tenant A",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_a}}"
+          }
+        ],
+        "url": {
+          "raw": "{{clientes_url}}/clientes/{{cliente_id}}",
+          "host": [
+            "{{clientes_url}}/clientes/{{cliente_id}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) pm.test('Cliente correcto', () => pm.expect(pm.response.json().cliente.cliente_id).to.eql(pm.collectionVariables.get('cliente_id')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Subir documento de prueba",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_a}}"
+          }
+        ],
+        "url": {
+          "raw": "{{clientes_url}}/clientes/{{cliente_id}}/documentos",
+          "host": [
+            "{{clientes_url}}/clientes/{{cliente_id}}/documentos"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"nombre\": \"prueba-s3.txt\", \"contenido_base64\": \"UHJ1ZWJhIGRlIGRvY3VtZW50byBDUk0gU2FhUy4=\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 201', () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) { const d = pm.response.json().documento; pm.collectionVariables.set('documento_id', d.documento_id); pm.test('Nombre correcto', () => pm.expect(d.nombre).to.eql('prueba-s3.txt')); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Listar documentos",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_a}}"
+          }
+        ],
+        "url": {
+          "raw": "{{clientes_url}}/clientes/{{cliente_id}}/documentos?siguiente={{documentos_siguiente}}",
+          "host": [
+            "{{clientes_url}}/clientes/{{cliente_id}}/documentos?siguiente={{documentos_siguiente}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) { const d = pm.response.json(); const encontrado = d.documentos.some(x => x.documento_id === pm.collectionVariables.get('documento_id')); pm.test('Documento encontrado o quedan páginas', () => pm.expect(encontrado || !!d.siguiente).to.be.true); pm.collectionVariables.set('documentos_siguiente', encontrado ? '' : (d.siguiente || '')); console.log(encontrado ? 'Documento encontrado' : 'Repetir esta petición para consultar la siguiente página'); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Solicitar enlace de descarga",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_a}}"
+          }
+        ],
+        "url": {
+          "raw": "{{clientes_url}}/clientes/{{cliente_id}}/documentos/{{documento_id}}/descargar",
+          "host": [
+            "{{clientes_url}}/clientes/{{cliente_id}}/documentos/{{documento_id}}/descargar"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) { const url = pm.response.json().url; pm.test('Enlace HTTPS', () => pm.expect(url).to.match(/^https:\\/\\//)); pm.collectionVariables.set('url_descarga', url); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Descargar el archivo desde S3",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url_descarga}}",
+          "host": [
+            "{{url_descarga}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) pm.test('Contenido correcto', () => pm.expect(pm.response.text()).to.eql('Prueba de documento CRM SaaS.'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Sin token: acceso rechazado",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{clientes_url}}/clientes/{{cliente_id}}/documentos",
+          "host": [
+            "{{clientes_url}}/clientes/{{cliente_id}}/documentos"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Login del tenant B",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{usuarios_url}}/usuarios/login",
+          "host": [
+            "{{usuarios_url}}/usuarios/login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"correo\": \"{{correo_b}}\", \"contrasena\": \"{{contrasena_b}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) { const d = pm.response.json(); pm.collectionVariables.set('token_b', d.token); pm.collectionVariables.set('tenant_b', d.tenant_id); pm.test('Tenant diferente de A', () => pm.expect(d.tenant_id).not.to.eql(pm.collectionVariables.get('tenant_a'))); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Tenant B no lista documentos de A",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_b}}"
+          }
+        ],
+        "url": {
+          "raw": "{{clientes_url}}/clientes/{{cliente_id}}/documentos",
+          "host": [
+            "{{clientes_url}}/clientes/{{cliente_id}}/documentos"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Tenant B no descarga documentos de A",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_b}}"
+          }
+        ],
+        "url": {
+          "raw": "{{clientes_url}}/clientes/{{cliente_id}}/documentos/{{documento_id}}/descargar",
+          "host": [
+            "{{clientes_url}}/clientes/{{cliente_id}}/documentos/{{documento_id}}/descargar"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Respuesta HTTP 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "usuarios_url",
+      "value": "https://6ge9waha1h.execute-api.us-east-1.amazonaws.com"
+    },
+    {
+      "key": "clientes_url",
+      "value": "https://3l552xeuv9.execute-api.us-east-1.amazonaws.com"
+    },
+    {
+      "key": "correo_a",
+      "value": ""
+    },
+    {
+      "key": "contrasena_a",
+      "value": ""
+    },
+    {
+      "key": "cliente_id",
+      "value": ""
+    },
+    {
+      "key": "correo_b",
+      "value": ""
+    },
+    {
+      "key": "contrasena_b",
+      "value": ""
+    },
+    {
+      "key": "documentos_siguiente",
+      "value": ""
+    }
+  ]
+}
