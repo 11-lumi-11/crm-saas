@@ -1,6 +1,6 @@
 # Frontend oficial del CRM
 
-Aplicación React y Vite basada en el diseño aprobado por el grupo. Autenticación, Clientes, Notificaciones, Productos y Cotizaciones, y las funciones integradas de Oportunidades y Actividades usan sus servicios. Los indicadores de Inicio utilizan datos simulados que se reinician al recargar.
+Aplicación React y Vite basada en el diseño aprobado por el grupo. Autenticación, Clientes, Notificaciones, Productos y Cotizaciones, y las funciones integradas de Oportunidades y Actividades usan sus servicios. Los indicadores de Inicio resumen la primera página de datos reales disponibles.
 
 El avance, las pruebas y los pendientes se registran en [ESTADO_FRONTEND.md](ESTADO_FRONTEND.md).
 
@@ -15,13 +15,13 @@ npm run dev
 
 `VITE_USUARIOS_URL`, `VITE_CLIENTES_URL`, `VITE_OPORTUNIDADES_URL`, `VITE_ACTIVIDADES_URL`, `VITE_PRODUCTOS_URL` y `VITE_NOTIFICACIONES_URL` identifican las URL públicas de API Gateway. Si no están definidas, se usan las URL del entorno `dev` desplegado por el grupo. Para otra cuenta o entorno, configúralas antes de compilar o en la configuración de compilación de Amplify. Las variables `VITE_` son visibles en el navegador: no deben contener `JWT_SECRET`, contraseñas ni credenciales de AWS.
 
-El registro crea la empresa y luego solicita iniciar sesión; no inicia una sesión automáticamente. Una sesión válida se conserva en el navegador hasta que vence el token o se cierra sesión. Clientes permite listar, crear, editar y archivar clientes y gestionar contactos. Oportunidades permite listar, crear y cambiar etapas; Actividades permite listar y completar; Notificaciones permite consultar y marcar avisos como leídos; Productos y Cotizaciones permiten operar con el catálogo y las ofertas reales. El resto de sus operaciones figura como pendiente en el registro de estado. Los indicadores de Inicio siguen siendo una demostración local y no se sincronizan con los servicios.
+El registro crea la empresa y luego solicita iniciar sesión; no inicia una sesión automáticamente. Una sesión válida se conserva en el navegador hasta que vence el token o se cierra sesión. Clientes permite listar, crear y editar clientes y gestionar contactos. Oportunidades permite listar, crear y marcar como perdidas; el envío y la aceptación de cotizaciones también actualizan su etapa. Actividades permite listar y completar; Notificaciones permite consultar y marcar avisos como leídos; Productos y Cotizaciones permiten operar con el catálogo y las ofertas reales. El resto de sus operaciones figura como pendiente en el registro de estado.
 
 ```sh
 npm run build
 ```
 
-La compilación genera `dist/`, que Amplify sirve como sitio estático. La publicación `dev` del 2026-11-12 está disponible en [https://dev.d38c15mc7g1yzr.amplifyapp.com](https://dev.d38c15mc7g1yzr.amplifyapp.com). La página respondió HTTP 200; las pruebas funcionales desde esa URL siguen pendientes.
+La compilación genera `dist/`, que Amplify sirve como sitio estático. La publicación `dev` del 2026-11-22 está disponible en [https://dev.d38c15mc7g1yzr.amplifyapp.com](https://dev.d38c15mc7g1yzr.amplifyapp.com). Incluye la gestión de documentos de clientes; el usuario informó que pudo iniciar sesión, subir y descargar un documento desde esa versión.
 
 ## Publicación manual en Amplify
 

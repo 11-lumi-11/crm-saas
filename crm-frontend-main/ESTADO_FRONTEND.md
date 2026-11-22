@@ -1,10 +1,10 @@
 # Estado del frontend oficial
 
-La navegación local conserva en memoria las secciones visitadas durante la sesión. Al volver, muestra los datos cargados y los actualiza en segundo plano si tienen al menos un minuto o quedaron invalidados por un cambio relacionado; el botón Actualizar fuerza una consulta. Al recargar la página o cerrar sesión se descartan. La aceptación pendiente sigue consultándose mientras la aplicación esté abierta. El comportamiento nuevo está pendiente de prueba manual con AWS y de publicación en Amplify.
+La navegación precarga las secciones permitidas y conserva sus datos en memoria durante la sesión. Al volver, muestra los datos cargados y los actualiza en segundo plano si tienen al menos un minuto o quedaron invalidados por un cambio relacionado; el botón Actualizar fuerza una consulta y muestra su progreso. Al recargar la página o cerrar sesión se descartan los datos en memoria. La última sección se conserva por pestaña y usuario al recargar. La aceptación pendiente sigue consultándose mientras la aplicación esté abierta. El usuario informó que la navegación local se siente más fluida; la validación de estos cambios desde Amplify sigue pendiente.
 
-Actualizado: 2026-11-17. El código oficial está en `crm-frontend-main` y conserva el diseño aprobado por el grupo. Se ejecuta como aplicación React/Vite en el navegador. Amplify informó publicación exitosa en `dev`, `us-east-1`, en [https://dev.d38c15mc7g1yzr.amplifyapp.com](https://dev.d38c15mc7g1yzr.amplifyapp.com); la página raíz respondió HTTP 200. Los flujos desde esa URL aún no se han probado.
+Actualizado: 2026-11-22. El código oficial está en `crm-frontend-main` y conserva el diseño aprobado por el grupo. Se ejecuta como aplicación React/Vite en el navegador. El usuario probó desde localhost con el backend AWS `dev` la persistencia de cliente y oportunidad, la llegada de una notificación y el flujo de envío y aceptación de cotización. El detalle está en la [guía de pruebas](../docs/guia_pruebas_frontend_aws.md). Los flujos desde Amplify aún no se han probado.
 
-**Estado:** el frontend está versionado en Git. Los cambios locales posteriores al despliegue del backend aún requieren una nueva publicación de Amplify y validación con AWS.
+**Estado:** el frontend se publicó manualmente en Amplify `dev` el 2026-11-22, trabajo 3 `SUCCEED`. El usuario informó que probó login, subida y descarga de documentos desde el frontend publicado. Las conexiones asíncronas y el problema intermitente de autenticación se describen en [integraciones AWS](../docs/integraciones_aws_demo.md).
 
 ## Usuarios y autenticación
 
@@ -16,6 +16,8 @@ Actualizado: 2026-11-17. El código oficial está en `crm-frontend-main` y conse
 - La compilación y las pruebas locales de autenticación pasan con respuestas de API simuladas. La seguridad y el aislamiento los exige el Authorizer en AWS; el estado del navegador no concede permisos por sí mismo.
 
 ## Clientes y contactos
+
+- Documentos de cliente: subir (hasta 4 MiB), listar y descargar desde la ficha. Backend y frontend se desplegaron en `dev` el 2026-11-22. El usuario informó que la subida y descarga funcionan desde Amplify; falta comprobar el aislamiento entre tenants.
 
 - Los correos del cliente y del contacto principal son opcionales; el formulario indica que deben confirmar su suscripción para recibir avisos de venta. La pantalla usa `VITE_CLIENTES_URL` y el token de la sesión para listar, crear, consultar y editar clientes y para listar y crear contactos. El archivo de clientes se retiró de la interfaz y la API en el código local. La creación de contactos permite elegir el principal y muestra los errores de la API.
 - Los listados permiten cargar páginas adicionales; la búsqueda se aplica únicamente a los clientes que ya se cargaron.
@@ -58,7 +60,7 @@ Actualizado: 2026-11-17. El código oficial está en `crm-frontend-main` y conse
 
 ## Pruebas pendientes para la próxima sesión
 
-El backend se desplegó en AWS `dev`; los últimos cambios del frontend están locales y todavía no se han probado con ese backend ni publicado en Amplify. Para iniciar el frontend desde `crm-frontend-main`, ejecutar `npm run dev -- --host 0.0.0.0` y abrir `http://localhost:5173/`. Comprobar la URL mostrada por Vite si el puerto está ocupado.
+El backend se desplegó en AWS `dev`. Algunas pruebas del flujo comercial se ejecutaron desde localhost; quedan pendientes las siguientes comprobaciones y su evidencia detallada. Para iniciar el frontend desde `crm-frontend-main`, ejecutar `npm run dev -- --host 0.0.0.0` y abrir `http://localhost:5173/`. Comprobar la URL mostrada por Vite si el puerto está ocupado.
 
 1. [ ] **Registro y sesión:** registrar una empresa, iniciar sesión, recargar y cerrar sesión; comprobar correo duplicado y contraseña incorrecta.
 2. [ ] **Cliente y contacto:** registrar un cliente con correo y agregar un contacto principal; verificar las solicitudes de suscripción y confirmarlas.

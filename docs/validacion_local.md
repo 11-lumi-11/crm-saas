@@ -18,9 +18,21 @@ El 2026-11-12 se añadieron pruebas reproducibles en `tests/` para la aceptació
 
 ## Preparación de despliegue
 
-Requisitos: AWS Academy activa con LabRole, Serverless Framework 4, Python 3.14 y `JWT_SECRET` configurado en el entorno de despliegue. El framework usa credenciales locales; no se deben registrar en documentos ni subir al repositorio. La región actual es `us-east-1`.
+Requisitos: AWS Academy activa con LabRole, Serverless Framework 4 y Python 3.14. La región actual es `us-east-1`. Las credenciales locales no se deben registrar ni subir al repositorio.
 
-Para el despliegue del 12-nov se generó `JWT_SECRET` en el archivo local `.env` de la raíz, excluido por Git y accesible solo al usuario del sistema. Para futuros despliegues de `compartido` y `usuarios`, cargar el mismo valor en el entorno antes de ejecutar Serverless, por ejemplo desde la raíz con `set -a; source .env; set +a`. No publicar ni compartir el archivo. Cambiar el secreto invalida los JWT anteriores y exige desplegar ambos componentes con el mismo valor.
+El 2026-11-22 se desplegaron `compartido` y `usuarios` con Parameter Store en `dev`. No eliminar el `.env` local hasta verificar el login y una ruta protegida con usuarios reales.
+
+### Gestión de la clave JWT con Parameter Store
+
+El código local usa `/crm/<stage>/jwt-secret` como parámetro `SecureString` estándar con la clave KMS administrada por AWS. Login y Authorizer leen el valor durante la ejecución, con caché de cinco minutos; las variables de Lambda contienen solo el nombre. Si falla la lectura con la caché vencida, el login falla y el Authorizer rechaza el acceso. No se implementó rotación automática.
+
+En `dev`, se creó el parámetro usando el valor local después de comparar que coincidía con ambas funciones desplegadas. El 2026-11-22 Serverless desplegó primero `compartido` y luego `usuarios`; Login y Authorizer muestran el nombre del parámetro y usan la capa común versión 3. La simulación IAM permitió `ssm:GetParameter` y `kms:Decrypt` para `LabRole`; el usuario informó login y acceso a documentos desde Amplify, y login exitoso desde Postman. También informó errores intermitentes de login y registro tras inactividad, pendientes de diagnóstico. Para otro stage, crear previamente su parámetro con un secreto propio sin registrarlo en la consola o Git. Ver [flujo Postman](postman/README-documentos-s3.md).
+
+Parameter Store es suficiente para la clave actual, que no rota automáticamente. El nivel estándar no cobra por almacenar el parámetro; pueden aplicarse otros cargos, por ejemplo de KMS. Secrets Manager ofrece funciones de rotación y tiene cargos por secreto y llamadas, pero automatizar una clave JWT propia también requiere coordinar el comportamiento de la aplicación. Ver [Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html) y [rotación en Secrets Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets.html).
+
+Para una rotación planificada sin cerrar sesiones, adaptar el login para firmar con la clave nueva y el Authorizer para aceptar temporalmente la nueva y la anterior. Conservar la anterior hasta que venzan los tokens emitidos con ella y coordinar la actualización de cachés antes de retirarla. El código actual acepta una sola clave; cambiarla invalida los tokens previos y puede causar rechazos si ambos componentes no se actualizan de forma coordinada. Ante una filtración confirmada, invalidar la clave comprometida de inmediato aunque los usuarios deban iniciar sesión otra vez.
+
+Las variables `VITE_` del frontend identifican URL públicas y pueden configurarse en Amplify o en el entorno de compilación; no deben contener secretos. Los JWT de sesión se entregan a los usuarios tras el login y no son parámetros de configuración.
 
 Preparar la capa PyJWT desde la raíz:
 

@@ -26,7 +26,7 @@ La revisión del 2026-11-11 y sus pruebas fueron locales. El 2026-11-12 Serverle
 | Productos y Cotizaciones | Sí | Catálogo, cotizaciones, aceptación asíncrona coordinada con Oportunidades y outbox | Pruebas nuevas con dobles para el protocolo; integración AWS pendiente | Pendiente de evidencia |
 | Actividades | Sí | CRUD, consumidor SQS, outbox y continuación programada para oportunidades perdidas | Pruebas locales de barrera y paginación; validación con volumen pendiente | Pendiente de evidencia |
 | Generación/carga de datos ficticios | Requisitos definidos | `generar_datos.py` y `cargar_datos.py` vacíos; sí existe migración de integridad | Migración cubierta por pruebas locales | Pendiente |
-| Frontend Amplify | Visión funcional | Frontend oficial en `crm-frontend-main`; resumen parcial con datos de API y flujos actuales; pendientes en su registro de estado | Pruebas y compilación locales; las últimas modificaciones no se han probado en AWS | La versión anterior está publicada en `dev`; actualización pendiente |
+| Frontend Amplify | Visión funcional | Frontend oficial en `crm-frontend-main`; resumen parcial con datos de API y flujos actuales; pendientes en su registro de estado | Pruebas locales y flujos comerciales informados por el usuario desde localhost con AWS `dev` | Publicación manual del 2026-11-22, trabajo 3 `SUCCEED`; usuario informó login y subida y descarga de documentos desde Amplify |
 | Pruebas y herramientas | Colección Postman y validación local | Pruebas de aceptación y Notificaciones en `tests/`; la suite anterior no está en el remoto | Ver [validación local](validacion_local.md) | Postman pendiente de ejecución documentada |
 
 ### Correcciones realizadas el 2026-11-11
@@ -132,7 +132,7 @@ Otras piezas del grupo: **FrontEnd (Amplify)**, **Diagrama de arquitectura**, **
 - **Validación:** API Gateway (HTTP API) detiene cada petición protegida y ejecuta el **Lambda Authorizer**, que revisa firma y expiración y lee el usuario y tenant actuales con consistencia fuerte. Exige ambos activos y que el rol del token coincida con el rol vigente. La caché está deshabilitada. Si no lo es, la petición se rechaza y el servicio **nunca se ejecuta**. Si lo es, el servicio recibe la petición con `tenant_id`, `usuario_id` y `rol`.
 - **Autorización (qué puedes hacer):** cada servicio revisa el `rol` según la tabla de permisos.
 - **Rutas públicas** (sin token): solo `POST /usuarios/login` y el registro de una nueva empresa. **Todo lo demás es protegido.**
-- **Clave secreta del token:** variable de entorno `JWT_SECRET` (nunca en código ni repositorio), utilizada por Usuarios para emitir tokens y por el Authorizer para verificarlos. Los demás servicios reciben las claims verificadas; no necesitan la clave.
+- **Clave secreta del token:** Usuarios y Authorizer obtienen el valor de `/crm/<stage>/jwt-secret` en Parameter Store (`SecureString`); conservan una caché de cinco minutos y reciben solo el nombre del parámetro en el entorno. El parámetro `dev` conserva el valor anterior; el código se desplegó el 2026-11-22 y el usuario informó login y acceso a documentos desde Amplify. Hay errores intermitentes de login y registro tras inactividad, aún sin diagnóstico. Los demás servicios no necesitan la clave. Ver [validación local](validacion_local.md).
 - **Contraseñas:** PBKDF2-HMAC-SHA256 con 600,000 iteraciones y sal aleatoria de 16 bytes. Se guarda `pbkdf2_sha256$iteraciones$sal$hash` en `contrasena_hash`. Los SHA-256 previos solo se admiten para verificar y migrar tras un login correcto. No se devuelve el hash en respuestas. Los JWT nuevos expiran en 1 hora; tokens anteriores conservan su expiración pero pasan la comprobación del estado y rol actuales.
 - **Códigos 401 vs 403 del token:** el Flujo 8 pide 401 si falta el token y 403 si está vencido o alterado. Con HTTP API y respuestas simples del authorizer, API Gateway puede devolver el mismo rechazo en ambos casos. **\[VERIFICAR\]** en una prueba real y ajustar si hace falta.
 
@@ -256,6 +256,8 @@ El candado de nombre, el de correo, el tenant, el primer admin y su evento pendi
 **Implementado:** Usuarios guarda `usuario.creado` en su outbox transaccional; el publicador programado lo envía al SNS compartido y Notificaciones puede consumirlo. **AWS pendiente:** registrar evidencia detallada de publicación, reintento, atributo `tipo` y consumo.
 
 ### 7.2 Clientes
+
+**Documentos de clientes (backend desplegado en `dev` el 2026-11-22; pruebas funcionales AWS pendientes):** la ficha del cliente permite subir, listar y descargar archivos de hasta 4 MiB. `POST /clientes/{cliente_id}/documentos` recibe `nombre` y `contenido_base64`; `GET` en la misma ruta lista páginas con `siguiente`; `GET /clientes/{cliente_id}/documentos/{documento_id}/descargar` devuelve una URL de descarga válida por 60 segundos. Las tres rutas requieren JWT y comprueban que el cliente pertenece al tenant; la descarga comprueba también que el documento pertenece al cliente. S3 almacena el archivo en un bucket privado cifrado y la tabla DynamoDB `t_documentos_clientes`, propia del servicio Clientes, almacena los metadatos. El índice de listado es eventualmente consistente. El acceso es para usuarios del CRM; no se habilita acceso directo para clientes finales. La simulación IAM permitió acceso S3 y DynamoDB a `LabRole`; verificar el flujo con dos tenants en AWS. La petición sin token devolvió 401. Ver [flujo Postman](postman/README-documentos-s3.md).
 
 **Estado:** diseñado e implementado; validación local parcial según sección 14. Verificación AWS pendiente de evidencia.
 
@@ -757,6 +759,8 @@ Cualquier cambio de nombres, campos, rutas o eventos se documenta aquí junto co
 ## 14. Validación, pendientes y evidencia AWS
 
 **Despliegue 2026-11-17 (hora de Lima; 2026-11-18 UTC):** Serverless Framework 4 desplegó `compartido` y los seis servicios en la cuenta de laboratorio terminada en `5495`, región `us-east-1`, stage `dev`. CloudFormation informó `UPDATE_COMPLETE` para las siete pilas. Las alarmas de las DLQ de solicitud y resultado de aceptación aparecen en estado `OK`. La capa común publicada es `dev-crm-comun:2`. El despliegue y el estado de las alarmas no acreditan pruebas funcionales, entrega de correo ni permisos SNS de las funciones; esos casos siguen pendientes de validación.
+
+**Frontend 2026-11-18:** la compilación local se publicó manualmente en Amplify `dev` (aplicación `d38c15mc7g1yzr`, trabajo 2 `SUCCEED`). La raíz pública devolvió el HTML con los archivos de la nueva compilación. Las pruebas funcionales desde la URL publicada siguen pendientes.
 
 ### Evidencia local
 
