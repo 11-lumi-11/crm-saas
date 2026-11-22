@@ -26,7 +26,7 @@ provider:
         enableSimpleResponses: true
         payloadVersion: '2.0'
   environment:
-    JWT_SECRET: ${env:JWT_SECRET}
+    JWT_SECRET_PARAMETER: /crm/${sls:stage}/jwt-secret
     JWT_EXPIRACION_HORAS: '1'
     TABLE_TENANTS: ${sls:stage}-t_tenants
     TABLE_USUARIOS: ${sls:stage}-t_usuarios

@@ -6,6 +6,7 @@ from botocore.exceptions import ClientError
 from datetime import datetime, timedelta, timezone
 from crm_comun import ErrorNegocio, leer_body, manejar_errores, respuesta, validar_correo, validar_texto
 from crm_comun.contrasenas import crear_hash, verificar
+from crm_comun.secretos import clave_jwt
 
 
 @manejar_errores
@@ -42,6 +43,6 @@ def lambda_handler(event, context):
     ahora = datetime.now(timezone.utc)
     token = jwt.encode({**{k: usuario[k] for k in ('usuario_id', 'tenant_id', 'rol')},
                         'iat': ahora, 'exp': ahora + timedelta(hours=horas)},
-                       os.environ['JWT_SECRET'], algorithm='HS256')
+                       clave_jwt(), algorithm='HS256')
     return respuesta(200, {'token': token, 'expira_en_segundos': horas * 3600,
                            **{k: usuario[k] for k in ('usuario_id', 'tenant_id', 'rol')}})

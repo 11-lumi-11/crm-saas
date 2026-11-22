@@ -12,7 +12,7 @@ provider:
   iam:
     role: arn:aws:iam::${aws:accountId}:role/LabRole
   environment:
-    JWT_SECRET: ${env:JWT_SECRET}
+    JWT_SECRET_PARAMETER: /crm/${sls:stage}/jwt-secret
     TABLE_USUARIOS: ${sls:stage}-t_usuarios
     TABLE_TENANTS: ${sls:stage}-t_tenants
 
@@ -40,6 +40,7 @@ functions:
     handler: authorizer/Authorizer.lambda_handler
     layers:
       - { Ref: PyjwtLambdaLayer }
+      - { Ref: ComunLambdaLayer }
 
 resources:
   Resources:

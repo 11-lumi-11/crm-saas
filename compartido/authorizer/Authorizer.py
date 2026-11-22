@@ -1,6 +1,7 @@
 import os
 import boto3
 import jwt
+from crm_comun.secretos import clave_jwt
 
 
 def lambda_handler(event, context):
@@ -8,7 +9,7 @@ def lambda_handler(event, context):
     if token.startswith('Bearer '):
         token = token[7:]
     try:
-        datos = jwt.decode(token, os.environ['JWT_SECRET'], algorithms=['HS256'],
+        datos = jwt.decode(token, clave_jwt(), algorithms=['HS256'],
                            options={'require': ['exp', 'tenant_id', 'usuario_id', 'rol']})
         if not all(isinstance(datos[k], str) and datos[k] for k in ('tenant_id', 'usuario_id', 'rol')):
             return {'isAuthorized': False}
