@@ -55,6 +55,61 @@ function FormularioContacto({ tienePrincipal, onGuardar, guardando }) {
   </form>
 }
 
+function Documentos({ clienteId }) {
+  const [documentos, setDocumentos] = useState([])
+  const [siguiente, setSiguiente] = useState(null)
+  const [archivo, setArchivo] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
+  const [error, setError] = useState('')
+  const [version, setVersion] = useState(0)
+  const cargar = async (cursor = null) => {
+    const pagina = await clientesApi.documentos(clienteId, cursor)
+    setDocumentos(actual => cursor ? [...actual, ...pagina.documentos.filter(d => !actual.some(a => a.documento_id === d.documento_id))] : pagina.documentos)
+    setSiguiente(pagina.siguiente)
+  }
+  useEffect(() => { cargar().catch(e => setError(e.message)) }, [clienteId])
+  const subir = async e => {
+    e.preventDefault()
+    if (!archivo) return
+    if (archivo.size === 0 || archivo.size > 4 * 1024 * 1024) {
+      setError('El archivo debe tener contenido y pesar como máximo 4 MB.'); return
+    }
+    setOcupado(true); setError('')
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const lector = new FileReader()
+        lector.onload = () => resolve(lector.result.split(',')[1])
+        lector.onerror = () => reject(new Error('No se pudo leer el archivo.'))
+        lector.readAsDataURL(archivo)
+      })
+      const { documento } = await clientesApi.subirDocumento(clienteId, { nombre: archivo.name, contenido_base64: base64 })
+      setDocumentos(actual => [documento, ...actual])
+      setArchivo(null); setVersion(v => v + 1)
+    } catch (e) { setError(e.message || 'No se pudo subir el documento.') }
+    finally { setOcupado(false) }
+  }
+  const descargar = async documentoId => {
+    setOcupado(true); setError('')
+    try {
+      const { url } = await clientesApi.descargarDocumento(clienteId, documentoId)
+      window.location.assign(url)
+    } catch (e) { setError(e.message || 'No se pudo descargar el documento.') }
+    finally { setOcupado(false) }
+  }
+  return <section>
+    <h4>Documentos</h4>
+    {error && <div className="error" role="alert">{error}</div>}
+    {documentos.length ? documentos.map(d => <div className="fila" key={d.documento_id}>
+      <span>{d.nombre}</span><button className="btn mini" disabled={ocupado} onClick={() => descargar(d.documento_id)}>Descargar</button>
+    </div>) : <div className="vacio">Aún no hay documentos.</div>}
+    {siguiente && <button className="btn" disabled={ocupado} onClick={() => cargar(siguiente).catch(e => setError(e.message))}>Cargar más documentos</button>}
+    <form className="form" onSubmit={subir}>
+      <label>Subir documento (máximo 4 MB)<input key={version} type="file" required disabled={ocupado} onChange={e => setArchivo(e.target.files[0] || null)} /></label>
+      <button className="btn" disabled={ocupado || !archivo}>{ocupado ? 'Procesando…' : 'Subir documento'}</button>
+    </form>
+  </section>
+}
+
 function Ficha({ id, onClose, onCambio }) {
   const { s } = useCrm()
   const [cliente, setCliente] = useState(null)
@@ -100,6 +155,7 @@ function Ficha({ id, onClose, onCambio }) {
           ['Industria', cliente.industria], ['Ciudad', cliente.ciudad], ['Responsable', responsable]].map(([k, v]) =>
           <div key={k}><small>{k}</small>{v || '—'}</div>)}</div>
         <div className="acciones"><button className="btn" onClick={() => setEditando(true)}>Editar cliente</button></div>
+        <Documentos clienteId={id} />
         <h4>Contactos</h4>
         {contactos.length ? contactos.map(c => <div className="fila" key={c.contacto_id}>
           <span>{c.nombre}{c.cargo && ` · ${c.cargo}`} {c.es_principal && <Insignia v="principal" />}</span>

@@ -32,4 +32,7 @@ export const clientesApi = {
   actualizar: (id, datos) => request(`/clientes/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(datos) }),
   contactos: (id, siguiente) => listado(`/clientes/${encodeURIComponent(id)}/contactos`, siguiente),
   crearContacto: (id, datos) => request(`/clientes/${encodeURIComponent(id)}/contactos`, { method: 'POST', body: JSON.stringify(datos) }),
+  documentos: (id, siguiente) => listado(`/clientes/${encodeURIComponent(id)}/documentos`, siguiente),
+  subirDocumento: (id, datos) => request(`/clientes/${encodeURIComponent(id)}/documentos`, { method: 'POST', body: JSON.stringify(datos) }),
+  descargarDocumento: (id, documentoId) => request(`/clientes/${encodeURIComponent(id)}/documentos/${encodeURIComponent(documentoId)}/descargar`),
 }

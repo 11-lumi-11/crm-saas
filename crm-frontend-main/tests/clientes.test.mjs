@@ -41,6 +41,16 @@ test('crear contacto principal envía un booleano a la ruta del cliente', async 
   assert.equal(JSON.parse(llamadas[0].opciones.body).es_principal, true)
 })
 
+test('documentos usa rutas protegidas del cliente y envía el archivo codificado', async () => {
+  const { api, llamadas } = await cargar({ data: { documento: { documento_id: 'doc_1' } } })
+  await api.subirDocumento('cli_1', { nombre: 'contrato.pdf', contenido_base64: 'cGRm' })
+  await api.descargarDocumento('cli_1', 'doc_1')
+  assert.equal(llamadas[0].url, 'https://clientes.example/clientes/cli_1/documentos')
+  assert.equal(JSON.parse(llamadas[0].opciones.body).contenido_base64, 'cGRm')
+  assert.equal(llamadas[1].url, 'https://clientes.example/clientes/cli_1/documentos/doc_1/descargar')
+  assert.equal(llamadas[1].opciones.headers.Authorization, 'Bearer token-demo')
+})
+
 test('sin token o sin conexión se muestran errores y no se simulan datos', async () => {
   const sinToken = await cargar({ token: null })
   await assert.rejects(sinToken.api.listar(), /No se encontró la sesión/)
