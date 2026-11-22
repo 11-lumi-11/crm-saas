@@ -35,6 +35,7 @@ Actualizado: 2026-11-22. El código oficial está en `crm-frontend-main` y conse
 
 - La pantalla consulta avisos reales dirigidos al usuario o a su rol, permite marcarlos como leídos individualmente, filtrar no leídos y cargar páginas adicionales. Una página filtrada puede estar vacía y aun así ofrecer más resultados.
 - La campana consulta periódicamente la primera página y muestra un indicador si allí hay avisos sin leer; no representa un conteo global y no garantiza que no haya avisos pendientes en otras páginas. Los eventos pueden tardar unos minutos en aparecer.
+- En la revisión del 2026-11-22 los eventos recientes de envío y aceptación de cotizaciones generaron avisos en AWS para sus destinatarios: creador de la cotización y rol gerente, respectivamente. El admin no recibe automáticamente esos avisos; las cuentas ficticias admin tienen un aviso histórico de bienvenida. El usuario informó que el flujo ya parecía funcionar. Ver [integraciones AWS](../docs/integraciones_aws_demo.md).
 - Prueba manual informada por el usuario el 2026-11-12: aparecen avisos de las actividades y otros eventos; permite marcarlos como leídos y conserva la lectura al recargar. Quedan por verificar roles distintos y más de una página.
 
 ## Productos y cotizaciones

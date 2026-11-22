@@ -762,6 +762,8 @@ Cualquier cambio de nombres, campos, rutas o eventos se documenta aquí junto co
 
 **Frontend 2026-11-18:** la compilación local se publicó manualmente en Amplify `dev` (aplicación `d38c15mc7g1yzr`, trabajo 2 `SUCCEED`). La raíz pública devolvió el HTML con los archivos de la nueva compilación. Las pruebas funcionales desde la URL publicada siguen pendientes.
 
+**Notificaciones, 2026-11-22:** en `dev` se comprobó que las siete conexiones SQS de los servicios del CRM estaban habilitadas y que eventos recientes de envío y aceptación de cotizaciones se publicaron y produjeron sus avisos. El envío se dirigió al creador de la cotización y la aceptación al rol gerente; por eso el admin que ejecuta una acción no necesariamente recibe el aviso. El usuario informó que el flujo ya parecía funcionar. Para la distribución de los avisos ficticios, ver [datos/README.md](../datos/README.md). Esta comprobación no acredita todos los casos de la matriz inferior.
+
 ### Evidencia local
 
 La revisión del 11-nov se describe en [validacion_local.md](validacion_local.md); su suite privada no está disponible en el repositorio. El 12-nov se añadieron pruebas locales reproducibles en `tests/` para la coordinación de aceptación y los eventos inválidos de Notificaciones, con dobles de AWS. La revisión estática de los siete YAML y las pruebas simuladas **no acreditan empaquetado, permisos, concurrencia, transacciones reales ni integración AWS**.

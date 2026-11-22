@@ -2,6 +2,8 @@
 
 El generador produce 10 000 registros por tenant en la tabla principal de cada uno de los seis servicios, más las tablas complementarias. Las tres empresas son ficticias y sus correos usan dominios reservados `.example.test`. Las cuentas generadas comparten una contraseña de demostración indicada por el generador; deben usarse solo en el entorno de prueba. No se generan confirmaciones ni suscripciones de correo.
 
+Las notificaciones históricas se distribuyen según sus destinatarios, no por igual entre usuarios: la cuenta administradora ficticia tiene su aviso de bienvenida; los vendedores reciben avisos de los clientes, oportunidades y cotizaciones asignados, y los gerentes reciben avisos destinados a su rol. En el código actual, `cotizacion.enviada` avisa a quien creó la cotización y `cotizacion.aceptada` al rol gerente; el administrador no recibe automáticamente todos esos avisos. Los avisos nuevos se procesan de manera asíncrona y pueden tardar algunos minutos.
+
 La generación usa la fecha fija 2026-11-14 y una semilla para los datos comerciales; el hash de contraseña usa una sal aleatoria. Las oportunidades tienen las etapas actuales, cada oportunidad ganada tiene una cotización aceptada y el conjunto incluye las actividades y controles de cierre correspondientes.
 
 ```sh

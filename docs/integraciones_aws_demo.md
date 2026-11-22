@@ -8,6 +8,8 @@ Revisión de solo lectura: 2026-11-22, cuenta de laboratorio terminada en `5495`
 
 **Pendiente de autenticación:** el usuario informa que, después de un periodo sin uso, los primeros intentos de login o registro devuelven `Internal Server Error` durante aproximadamente cinco minutos y luego funcionan. La causa no se ha investigado ni confirmado. Para la presentación, probar login y registro con anticipación suficiente y revisar CloudWatch si ocurre; esperar y reintentar no sustituye un diagnóstico.
 
+**Revisión posterior de notificaciones:** las siete conexiones del CRM seguían en `Enabled`. Para `ten_seguros`, se verificó que los eventos recientes `cotizacion.enviada` y `cotizacion.aceptada` se publicaron y que los avisos correspondientes estaban guardados. El envío se dirigió al creador original de la cotización y la aceptación al rol gerente; no necesariamente al admin que realizó la acción. El usuario informó que el flujo ya parecía funcionar. Las notificaciones se consultan por usuario y rol, y la carga histórica no las distribuye de forma uniforme. Ver [datos ficticios](../datos/README.md). No se modificaron las reglas de destinatarios.
+
 ## Conexiones SQS a Lambda
 
 Estas siete conexiones del CRM aparecieron en estado **Disabled**, todas con `StateTransitionReason: USER_INITIATED`. Ese texto no identifica al actor ni demuestra por sí solo que una persona las haya desactivado. La última modificación registrada estaba entre las 15:28 y las 15:31 (hora de Lima) del 18 de noviembre. La consulta de CloudTrail para `UpdateEventSourceMapping` no devolvió eventos; la causa no está acreditada.
