@@ -84,7 +84,6 @@ Antes de desplegar Usuarios y el stack compartido, configura `/crm/<stage>/jwt-s
 
 Consulta el estado de implementación y validación, así como las guías del proyecto, en estos documentos:
 
-<<<<<<< HEAD
 - Diagramas de la solución:
   - [Arquitectura de solución](docs/diagramas/ARQUITECTURA_SOLUCION_FINAL.png)
   - [Inventario de funciones Lambda](docs/diagramas/INVENTARIO%20DE%20FUNCIONES%20LAMBDA.png)
@@ -92,7 +91,3 @@ Consulta el estado de implementación y validación, así como las guías del pr
 - [Pruebas del frontend y seguimiento en AWS](docs/guia_pruebas_frontend_aws.md)
 - [Colección Postman](docs/postman/CRM-SaaS.postman_collection.json)
 - [Datos de prueba](datos/README.md)
-=======
-- [Diagramas de arquitectura](docs/diagramas/)
-- [Generación, verificación y carga de datos](datos/README.md)
->>>>>>> e238b89f8db3ea3d72d6787a93ad99680d85583c
