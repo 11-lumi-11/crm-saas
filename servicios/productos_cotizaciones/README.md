@@ -1,6 +1,6 @@
 # Productos y Cotizaciones
 
-Microservicio 5 del CRM. Catálogo de productos del tenant y cotizaciones para una oportunidad. Contrato completo en `docs/documento_base.md`, sección 7.5.
+Microservicio 5 del CRM. Catálogo de productos del tenant y cotizaciones para una oportunidad.
 
 ## Despliegue
 

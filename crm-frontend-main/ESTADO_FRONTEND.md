@@ -2,9 +2,9 @@
 
 La navegación precarga las secciones permitidas y conserva sus datos en memoria durante la sesión. Al volver, muestra los datos cargados y los actualiza en segundo plano si tienen al menos un minuto o quedaron invalidados por un cambio relacionado; el botón Actualizar fuerza una consulta y muestra su progreso. Al recargar la página o cerrar sesión se descartan los datos en memoria. La última sección se conserva por pestaña y usuario al recargar. La aceptación pendiente sigue consultándose mientras la aplicación esté abierta. El usuario informó que la navegación local se siente más fluida; la validación de estos cambios desde Amplify sigue pendiente.
 
-Actualizado: 2026-11-22. El código oficial está en `crm-frontend-main` y conserva el diseño aprobado por el grupo. Se ejecuta como aplicación React/Vite en el navegador. El usuario probó desde localhost con el backend AWS `dev` la persistencia de cliente y oportunidad, la llegada de una notificación y el flujo de envío y aceptación de cotización. El detalle está en la [guía de pruebas](../docs/guia_pruebas_frontend_aws.md). Los flujos desde Amplify aún no se han probado.
+Actualizado: 2026-11-22. El código oficial está en `crm-frontend-main` y conserva el diseño aprobado por el grupo. Se ejecuta como aplicación React/Vite en el navegador. El usuario probó desde localhost con el backend AWS `dev` la persistencia de cliente y oportunidad, la llegada de una notificación y el flujo de envío y aceptación de cotización.
 
-**Estado:** el frontend se publicó manualmente en Amplify `dev` el 2026-11-22, trabajo 3 `SUCCEED`. El usuario informó que probó login, subida y descarga de documentos desde el frontend publicado. Las conexiones asíncronas y el problema intermitente de autenticación se describen en [integraciones AWS](../docs/integraciones_aws_demo.md).
+**Estado:** el frontend se publicó manualmente en Amplify `dev` el 2026-11-22, trabajo 3 `SUCCEED`. El usuario informó que probó login, subida y descarga de documentos desde el frontend publicado.
 
 ## Usuarios y autenticación
 
@@ -35,7 +35,7 @@ Actualizado: 2026-11-22. El código oficial está en `crm-frontend-main` y conse
 
 - La pantalla consulta avisos reales dirigidos al usuario o a su rol, permite marcarlos como leídos individualmente, filtrar no leídos y cargar páginas adicionales. Una página filtrada puede estar vacía y aun así ofrecer más resultados.
 - La campana consulta periódicamente la primera página y muestra un indicador si allí hay avisos sin leer; no representa un conteo global y no garantiza que no haya avisos pendientes en otras páginas. Los eventos pueden tardar unos minutos en aparecer.
-- En la revisión del 2026-11-22 los eventos recientes de envío y aceptación de cotizaciones generaron avisos en AWS para sus destinatarios: creador de la cotización y rol gerente, respectivamente. El admin no recibe automáticamente esos avisos; las cuentas ficticias admin tienen un aviso histórico de bienvenida. El usuario informó que el flujo ya parecía funcionar. Ver [integraciones AWS](../docs/integraciones_aws_demo.md).
+- En la revisión del 2026-11-22 los eventos recientes de envío y aceptación de cotizaciones generaron avisos en AWS para sus destinatarios: creador de la cotización y rol gerente, respectivamente. El admin no recibe automáticamente esos avisos; las cuentas ficticias admin tienen un aviso histórico de bienvenida. El usuario informó que el flujo ya parecía funcionar.
 - Prueba manual informada por el usuario el 2026-11-12: aparecen avisos de las actividades y otros eventos; permite marcarlos como leídos y conserva la lectura al recargar. Quedan por verificar roles distintos y más de una página.
 
 ## Productos y cotizaciones
