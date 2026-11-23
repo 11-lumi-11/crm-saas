@@ -80,16 +80,6 @@ serverless deploy --stage dev
 
 Antes de desplegar Usuarios y el stack compartido, configura `/crm/<stage>/jwt-secret` en AWS Systems Manager Parameter Store como parámetro `SecureString`. Nunca guardes el secreto en Git.
 
-## Pruebas locales
-
-Las pruebas reproducibles disponibles en el repositorio usan dobles de AWS y se ejecutan desde la raíz:
-
-```sh
-python -m unittest discover -s tests -p "test_*.py" -v
-```
-
-No reemplazan pruebas de integración en AWS.
-
 ## Documentación y estado
 
 El informe distingue entre funcionalidades diseñadas, implementadas y verificadas en AWS; la existencia de código o configuración no implica por sí sola una validación en AWS. Al **22 de noviembre de 2026**, se reportaron despliegues de los stacks `dev`, publicación del frontend y carga de datos ficticios, además de pruebas funcionales parciales. La evidencia completa de todos los servicios y escenarios sigue pendiente.

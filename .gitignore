@@ -8,3 +8,4 @@ __pycache__/
 datos/salida/
 /docs/*
 !/docs/diagramas/
+/tests/
