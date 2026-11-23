@@ -9,3 +9,4 @@ datos/salida/
 /docs/*
 !/docs/diagramas/
 /tests/
+/crm-frontend-main/ESTADO_FRONTEND.md

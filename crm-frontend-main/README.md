@@ -1,6 +1,8 @@
 # Frontend del CRM
 
-Aplicación web del CRM, desarrollada con React y Vite. Permite gestionar clientes, oportunidades, actividades, productos, cotizaciones y notificaciones.
+Aplicación web del CRM, desarrollada con React y Vite. Se conecta a los microservicios mediante API Gateway y muestra la información correspondiente a la empresa del usuario autenticado.
+
+La interfaz incluye inicio de sesión, gestión de clientes y contactos, consulta de oportunidades y actividades, catálogo de productos, cotizaciones y notificaciones. También permite subir y descargar documentos asociados a clientes.
 
 ## Ejecución local
 
@@ -20,4 +22,4 @@ Para generar la versión de producción:
 npm run build
 ```
 
-Los archivos generados se encuentran en `dist/`.
+Los archivos generados se encuentran en `dist/`. Para revisar la compilación localmente, ejecuta `npm run preview`.
