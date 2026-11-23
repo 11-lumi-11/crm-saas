@@ -82,7 +82,12 @@ Antes de desplegar Usuarios y el stack compartido, configura `/crm/<stage>/jwt-s
 
 ## Documentación y estado
 
-El informe distingue entre funcionalidades diseñadas, implementadas y verificadas en AWS; la existencia de código o configuración no implica por sí sola una validación en AWS. Al **22 de noviembre de 2026**, se reportaron despliegues de los stacks `dev`, publicación del frontend y carga de datos ficticios, además de pruebas funcionales parciales. La evidencia completa de todos los servicios y escenarios sigue pendiente.
+Consulta el estado de implementación y validación, así como las guías del proyecto, en estos documentos:
 
-- [Diagramas de arquitectura](docs/diagramas/)
-- [Generación, verificación y carga de datos](datos/README.md)
+- Diagramas de la solución:
+  - [Arquitectura de solución](docs/diagramas/ARQUITECTURA_SOLUCION_FINAL.png)
+  - [Inventario de funciones Lambda](docs/diagramas/INVENTARIO%20DE%20FUNCIONES%20LAMBDA.png)
+- [Validación local y despliegue](docs/validacion_local.md)
+- [Pruebas del frontend y seguimiento en AWS](docs/guia_pruebas_frontend_aws.md)
+- [Colección Postman](docs/postman/CRM-SaaS.postman_collection.json)
+- [Datos de prueba](datos/README.md)
