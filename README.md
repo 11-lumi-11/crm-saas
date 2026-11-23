@@ -78,22 +78,13 @@ Desde cada carpeta:
 serverless deploy --stage dev
 ```
 
-Antes de desplegar Usuarios y el stack compartido, configura `/crm/<stage>/jwt-secret` en AWS Systems Manager Parameter Store como parámetro `SecureString`. Nunca guardes el secreto en Git. Los pasos de dependencias, migración y validación se documentan en [`docs/validacion_local.md`](docs/validacion_local.md).
-
-## Pruebas locales
-
-Las pruebas reproducibles disponibles en el repositorio usan dobles de AWS y se ejecutan desde la raíz:
-
-```sh
-python -m unittest discover -s tests -p "test_*.py" -v
-```
-
-No reemplazan pruebas de integración en AWS.
+Antes de desplegar Usuarios y el stack compartido, configura `/crm/<stage>/jwt-secret` en AWS Systems Manager Parameter Store como parámetro `SecureString`. Nunca guardes el secreto en Git.
 
 ## Documentación y estado
 
 Consulta el estado de implementación y validación, así como las guías del proyecto, en estos documentos:
 
+<<<<<<< HEAD
 - Diagramas de la solución:
   - [Arquitectura de solución](docs/diagramas/ARQUITECTURA_SOLUCION_FINAL.png)
   - [Inventario de funciones Lambda](docs/diagramas/INVENTARIO%20DE%20FUNCIONES%20LAMBDA.png)
@@ -101,3 +92,7 @@ Consulta el estado de implementación y validación, así como las guías del pr
 - [Pruebas del frontend y seguimiento en AWS](docs/guia_pruebas_frontend_aws.md)
 - [Colección Postman](docs/postman/CRM-SaaS.postman_collection.json)
 - [Datos de prueba](datos/README.md)
+=======
+- [Diagramas de arquitectura](docs/diagramas/)
+- [Generación, verificación y carga de datos](datos/README.md)
+>>>>>>> e238b89f8db3ea3d72d6787a93ad99680d85583c

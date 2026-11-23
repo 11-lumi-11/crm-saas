@@ -1,38 +1,25 @@
-# Frontend oficial del CRM
+# Frontend del CRM
 
-Aplicación React y Vite basada en el diseño aprobado por el grupo. Autenticación, Clientes, Notificaciones, Productos y Cotizaciones, y las funciones integradas de Oportunidades y Actividades usan sus servicios. Los indicadores de Inicio resumen la primera página de datos reales disponibles.
+Aplicación web del CRM, desarrollada con React y Vite. Se conecta a los microservicios mediante API Gateway y muestra la información correspondiente a la empresa del usuario autenticado.
 
-El avance, las pruebas y los pendientes se registran en [ESTADO_FRONTEND.md](ESTADO_FRONTEND.md).
+La interfaz incluye inicio de sesión, gestión de clientes y contactos, consulta de oportunidades y actividades, catálogo de productos, cotizaciones y notificaciones. También permite subir y descargar documentos asociados a clientes.
 
-## Ejecutar localmente
+## Ejecución local
+
+Desde esta carpeta:
 
 ```sh
-cd crm-frontend-main
 npm ci
 cp .env.example .env
 npm run dev
 ```
 
-`VITE_USUARIOS_URL`, `VITE_CLIENTES_URL`, `VITE_OPORTUNIDADES_URL`, `VITE_ACTIVIDADES_URL`, `VITE_PRODUCTOS_URL` y `VITE_NOTIFICACIONES_URL` identifican las URL públicas de API Gateway. Si no están definidas, se usan las URL del entorno `dev` desplegado por el grupo. Para otra cuenta o entorno, configúralas antes de compilar o en la configuración de compilación de Amplify. Las variables `VITE_` son visibles en el navegador: no deben contener `JWT_SECRET`, contraseñas ni credenciales de AWS.
+Las variables `VITE_*_URL` de `.env` configuran las URL de los servicios. Por defecto se utiliza el entorno `dev`. No incluyas contraseñas ni credenciales en estas variables, ya que son visibles en el navegador.
 
-El registro crea la empresa y luego solicita iniciar sesión; no inicia una sesión automáticamente. Una sesión válida se conserva en el navegador hasta que vence el token o se cierra sesión. Clientes permite listar, crear y editar clientes y gestionar contactos. Oportunidades permite listar, crear y marcar como perdidas; el envío y la aceptación de cotizaciones también actualizan su etapa. Actividades permite listar y completar; Notificaciones permite consultar y marcar avisos como leídos; Productos y Cotizaciones permiten operar con el catálogo y las ofertas reales. El resto de sus operaciones figura como pendiente en el registro de estado.
+Para generar la versión de producción:
 
 ```sh
 npm run build
 ```
 
-La compilación genera `dist/`, que Amplify sirve como sitio estático. La publicación `dev` del 2026-11-22 está disponible en [https://dev.d38c15mc7g1yzr.amplifyapp.com](https://dev.d38c15mc7g1yzr.amplifyapp.com). Incluye la gestión de documentos de clientes; el usuario informó que pudo iniciar sesión, subir y descargar un documento desde esa versión.
-
-## Publicación manual en Amplify
-
-El stack `crm-frontend-hosting-dev` crea la aplicación y rama de Amplify mediante Serverless Framework y CloudFormation. El código se compila localmente y se publica con el script incluido; no hay conexión a Git ni despliegue automático. Con las credenciales AWS configuradas, desde esta carpeta:
-
-```sh
-npm ci
-npm test
-npm run build
-serverless deploy --stage dev
-../.venv/bin/python scripts/publicar_amplify.py --stage dev
-```
-
-El script necesita boto3 y utiliza los outputs del stack para publicar el contenido de `dist/`. No imprime las credenciales ni la URL prefirmada de carga. Las variables `VITE_` se incorporan durante `npm run build`, no después de subir el paquete. Mantener el mismo entorno y revisar que las URL apunten al backend deseado. Para una versión conectada a Git o con despliegue automático se necesita una configuración adicional.
+Los archivos generados se encuentran en `dist/`. Para revisar la compilación localmente, ejecuta `npm run preview`.

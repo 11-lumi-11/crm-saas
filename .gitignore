@@ -6,3 +6,7 @@ compartido/capa_jwt/python/
 __pycache__/
 *.pyc
 datos/salida/
+/docs/*
+!/docs/diagramas/
+/tests/
+/crm-frontend-main/ESTADO_FRONTEND.md
